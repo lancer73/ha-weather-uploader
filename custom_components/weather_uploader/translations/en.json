@@ -32,7 +32,7 @@
       },
       "sensors": {
         "title": "Map your sensors",
-        "description": "Select the Home Assistant entity for each field you want to publish. Leave a field blank to omit it. Units are converted automatically from each entity's declared unit. Note: rain_rate must be an instantaneous rate sensor, not an hourly accumulation."
+        "description": "Select the Home Assistant entity for each field you want to publish. Leave a field blank to omit it. Units are converted automatically from each entity's declared unit. Note: rain_rate must be an instantaneous rate sensor, not an hourly accumulation. Readings that fall outside a sane range for a field (for example a pressure that looks like Pascals rather than hPa) are dropped at runtime and flagged on the 'Source data problem' sensor."
       },
       "credentials_open": {
         "title": "Station details for {service}",
@@ -49,6 +49,10 @@
           "longitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
           "altitude": "Station ground elevation in metres above sea level."
         }
+      },
+      "confirm_mapping": {
+        "title": "Check sensor mapping",
+        "description": "Some mappings look unusual. You can still continue — these are warnings, not errors, and are often fine for custom or DIY sensors.\n\n{warnings}\n\nSelect Submit to save the mapping as-is, or go back to change it."
       }
     },
     "error": {
@@ -71,6 +75,10 @@
           "interval": "How often to read your sensors, in seconds. Each network is throttled separately to respect its own rate limit.",
           "max_sensor_age": "Drop readings whose entity has not reported for this long. This tracks whether your station is still sending data, not whether the value is changing, so a rain sensor reading 0.0 through a dry week is unaffected. Set 0 to disable (not recommended: a station that dies would then have its last reading republished as current, forever)."
         }
+      },
+      "confirm_mapping": {
+        "title": "Check sensor mapping",
+        "description": "Some mappings look unusual. You can still continue — these are warnings, not errors, and are often fine for custom or DIY sensors.\n\n{warnings}\n\nSelect Submit to save the mapping as-is, or go back to change it."
       }
     }
   },
