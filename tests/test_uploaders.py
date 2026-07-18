@@ -155,20 +155,106 @@ def test_wow_be_sends_uv(sample_data):
     assert up.build_params(sample_data)["UV"] == 4.0
 
 
-def test_windy_uses_absolute_pressure(sample_data):
-    """Windy must get station pressure in Pa, not sea-level."""
-    up = WindyUploader(None, "station-1", "apikey")
+def test_windy_uses_v2_endpoint():
+    """The legacy /pws/update endpoint is deprecated as of 2026-01."""
+    up = WindyUploader(None, "station-1", "pw")
+    assert up.url == "https://stations.windy.com/api/v2/observation/update"
+    assert "/pws/update" not in up.url
+
+
+def test_windy_params_are_all_documented(sample_data):
+    """Every query parameter must be a name the v2 API accepts."""
+    valid = {
+        "id",
+        "ID",
+        "station",
+        "si",
+        "stationId",
+        "time",
+        "ts",
+        "dateutc",
+        "wind",
+        "windspeedmph",
+        "gust",
+        "windgustmph",
+        "winddir",
+        "humidity",
+        "rh",
+        "dewpoint",
+        "dewptf",
+        "pressure",
+        "mbar",
+        "baromin",
+        "uv",
+        "UV",
+        "solarradiation",
+        "precip",
+        "rainin",
+        "hourlyrainin",
+        "temp",
+        "tempf",
+        "softwaretype",
+        "stationtype",
+        "PASSWORD",
+    }
+    up = WindyUploader(None, "station-1", "pw")
+    for key in up.build_params(sample_data):
+        assert key in valid, f"undocumented Windy parameter: {key}"
+
+
+def test_windy_sends_absolute_pressure_via_mbar(sample_data):
+    """Pressure goes in as hPa through mbar, not Pa through pressure.
+
+    The v2 mbar parameter takes hectopascals directly, avoiding the
+    hPa->Pa conversion the pressure parameter would need. Windy wants
+    station pressure, so pressure_absolute is mapped.
+    """
+    up = WindyUploader(None, "station-1", "pw")
     p = up.build_params(sample_data)
-    assert p["pressure"] == pytest.approx(100000.0)
+    assert p["mbar"] == pytest.approx(1000.0)  # sample_data absolute hPa
+    assert "pressure" not in p
     assert p["temp"] == pytest.approx(20.0)
 
 
-def test_owm_uses_relative_pressure_and_kelvin(sample_data):
-    """OWM wants SI units and sea-level pressure."""
-    up = OpenWeatherMapUploader(None, "st-1", "apikey")
+def test_windy_metric_passthrough(sample_data):
+    """Metric values are sent under metric names, unconverted."""
+    up = WindyUploader(None, "station-1", "pw")
     p = up.build_params(sample_data)
-    assert p["temperature"] == pytest.approx(293.15)
-    assert p["pressure"] == pytest.approx(101325.0)
+    assert p["wind"] == pytest.approx(sample_data["wind_speed"])
+    assert p["precip"] == pytest.approx(sample_data["rain_hourly"])
+    assert p["solarradiation"] == pytest.approx(sample_data["solar_radiation"])
+
+
+def test_owm_endpoint_is_measurements_not_stations_measurements():
+    """The send path is /data/3.0/measurements; /stations/ in it 404s."""
+    up = OpenWeatherMapUploader(None, "st-1", "apikey")
+    assert up.url == "https://api.openweathermap.org/data/3.0/measurements"
+    assert "stations/measurements" not in up.url
+
+
+def test_owm_measurements_are_metric_not_si():
+    """The station measurements endpoint takes Celsius and hPa.
+
+    This is the opposite of OpenWeatherMap's read endpoints, which
+    default to Kelvin and Pascals. The documented request example
+    (temperature 18.7, pressure 1021) is Celsius and hPa.
+    """
+    up = OpenWeatherMapUploader(None, "st-1", "apikey")
+    data = {
+        "temperature": 18.7,
+        "pressure_relative": 1021.0,
+        "dewpoint": 16.0,
+        "wind_speed": 1.2,
+        "rain_hourly": 2.0,
+        "visibility": 10.0,
+    }
+    p = up.build_params(data)
+    assert p["temperature"] == pytest.approx(18.7)  # Celsius, not 291.85 K
+    assert p["pressure"] == pytest.approx(1021.0)  # hPa, not 102100 Pa
+    assert p["dew_point"] == pytest.approx(16.0)
+    assert p["wind_speed"] == pytest.approx(1.2)
+    assert p["rain_1h"] == pytest.approx(2.0)  # mm
+    assert p["visibility_distance"] == pytest.approx(10.0)  # km, not 10000 m
 
 
 def test_pwsweather_mapping(sample_data):

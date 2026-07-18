@@ -146,3 +146,48 @@ def test_default_max_age_is_generous():
 def test_max_sensor_age_is_configurable():
     """The option key exists for the options flow to write."""
     assert CONF_MAX_SENSOR_AGE == "max_sensor_age"
+
+
+# --- Runtime plausibility -----------------------------------------------
+
+from custom_components.weather_uploader.const import PLAUSIBLE_RANGE  # noqa: E402
+from custom_components.weather_uploader.coordinator import _is_plausible  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        ("humidity", 50.0, True),
+        ("humidity", 150.0, False),  # impossible relative humidity
+        ("humidity", -5.0, False),
+        ("temperature", 20.0, True),
+        ("temperature", 55.0, True),  # hot but real
+        ("temperature", 200.0, False),  # e.g. a humidity sensor mis-mapped
+        ("pressure_relative", 1013.0, True),
+        ("pressure_relative", 101325.0, False),  # Pascals where hPa expected
+        ("wind_direction", 180.0, True),
+        ("wind_direction", 400.0, False),
+    ],
+)
+def test_plausibility_bounds(key, value, expected):
+    """Values outside a field's sane range are rejected."""
+    assert _is_plausible(key, value) is expected
+
+
+def test_plausibility_allows_unbounded_fields():
+    """Cumulative totals have no upper bound and must not be clipped."""
+    assert _is_plausible("rain_yearly", 999_999.0) is True
+
+
+def test_only_cumulative_totals_are_unbounded():
+    """Every field except cumulative rain totals has a range."""
+    from custom_components.weather_uploader.const import SENSOR_KEYS
+
+    missing = [k for k in SENSOR_KEYS if k not in PLAUSIBLE_RANGE]
+    assert set(missing) <= {"rain_weekly", "rain_monthly", "rain_yearly"}
+
+
+def test_pascals_leak_is_caught():
+    """The headline mis-unit case: 101325 Pa into an hPa field."""
+    assert not _is_plausible("pressure_relative", 101325.0)
+    assert _is_plausible("pressure_relative", 1013.25)
