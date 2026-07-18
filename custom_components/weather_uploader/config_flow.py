@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -14,6 +15,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import ATTR_DEVICE_CLASS, ATTR_UNIT_OF_MEASUREMENT
 from homeassistant.core import callback
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_ALTITUDE,
@@ -32,9 +34,13 @@ from .const import (
     MIN_INTERVAL,
     SENSOR_KEYS,
     SERVICE_METEO_SERVICES,
+    SERVICE_OPENWEATHERMAP,
     SERVICES,
     UNAUTHENTICATED_SERVICES,
 )
+from .uploaders.owm_station import StationError, create_station
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _sensor_selector() -> selector.EntitySelector:
@@ -158,6 +164,7 @@ class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
         self._interval: int = DEFAULT_INTERVAL
         self._mapping: dict[str, Any] = {}
         self._mapping_warnings: list[str] = []
+        self._owm_key: str = ""
 
     @staticmethod
     @callback
@@ -209,6 +216,12 @@ class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
 
         service = self._pending[0]
 
+        # OpenWeatherMap has no dashboard signup: the measurement
+        # station_id only exists once a station is created through the
+        # API. Route it to a dedicated step that can do that.
+        if service == SERVICE_OPENWEATHERMAP:
+            return await self.async_step_owm_station()
+
         if user_input is not None:
             self._services[service] = user_input
             self._pending.pop(0)
@@ -244,6 +257,110 @@ class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id=step,
             data_schema=vol.Schema(schema),
             description_placeholders={"service": service},
+        )
+
+    async def async_step_owm_station(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect the OpenWeatherMap key and choose how to get the ID.
+
+        The user either supplies an existing internal station ID, or
+        asks the integration to create a station through the API and
+        use the ID it returns.
+        """
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            self._owm_key = user_input[CONF_KEY]
+            if user_input["mode"] == "existing":
+                return await self.async_step_owm_existing()
+            return await self.async_step_owm_create()
+
+        schema = {
+            vol.Required(CONF_KEY): _password_selector(),
+            vol.Required("mode", default="create"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=["create", "existing"],
+                    translation_key="owm_mode",
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+        }
+        return self.async_show_form(
+            step_id="owm_station",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+        )
+
+    async def async_step_owm_existing(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Accept an internal station ID the user already has."""
+        if user_input is not None:
+            self._services[SERVICE_OPENWEATHERMAP] = {
+                CONF_STATION_ID: user_input[CONF_STATION_ID],
+                CONF_KEY: self._owm_key,
+            }
+            self._pending.pop(0)
+            return await self.async_step_credentials()
+
+        return self.async_show_form(
+            step_id="owm_existing",
+            data_schema=vol.Schema({vol.Required(CONF_STATION_ID): str}),
+        )
+
+    async def async_step_owm_create(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Create a station via the API and store the returned ID.
+
+        On any API failure the form is redisplayed with an error rather
+        than advancing, so a bad key or a connectivity problem is
+        visible immediately instead of surfacing as failed uploads
+        later.
+        """
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            session = async_get_clientsession(self.hass)
+            try:
+                station_id = await create_station(
+                    session,
+                    self._owm_key,
+                    external_id=user_input["external_id"],
+                    name=user_input["name"],
+                    latitude=user_input[CONF_LATITUDE],
+                    longitude=user_input[CONF_LONGITUDE],
+                    altitude=user_input[CONF_ALTITUDE],
+                )
+            except StationError as err:
+                errors["base"] = err.reason
+                _LOGGER.warning("OpenWeatherMap station setup failed: %s", err)
+            else:
+                self._services[SERVICE_OPENWEATHERMAP] = {
+                    CONF_STATION_ID: station_id,
+                    CONF_KEY: self._owm_key,
+                }
+                self._pending.pop(0)
+                return await self.async_step_credentials()
+
+        schema = {
+            vol.Required("external_id", default="ha_weather_uploader"): str,
+            vol.Required("name", default="Home Assistant"): str,
+            vol.Required(CONF_LATITUDE): _coordinate_selector(-90, 90),
+            vol.Required(CONF_LONGITUDE): _coordinate_selector(-180, 180),
+            vol.Required(CONF_ALTITUDE, default=0.0): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=-500,
+                    max=9000,
+                    step=1,
+                    unit_of_measurement="m",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+        }
+        return self.async_show_form(
+            step_id="owm_create",
+            data_schema=vol.Schema(schema),
+            errors=errors,
         )
 
     async def async_step_sensors(
@@ -295,10 +412,10 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
     a key.
     """
 
-    def __init__(self) -> None:
-        """Initialise options flow state."""
-        self._pending_options: dict[str, Any] = {}
-        self._mapping_warnings: list[str] = []
+    # No custom __init__: modern OptionsFlow exposes config_entry as a
+    # framework-managed property, and defining an __init__ that does not
+    # chain to super() skips that setup. Instance state is initialised
+    # lazily via getattr where it is used.
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -345,9 +462,13 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Show non-blocking mapping warnings and let the user proceed."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=self._pending_options)
+            return self.async_create_entry(
+                title="", data=getattr(self, "_pending_options", {})
+            )
         return self.async_show_form(
             step_id="confirm_mapping",
             data_schema=vol.Schema({}),
-            description_placeholders={"warnings": "\n".join(self._mapping_warnings)},
+            description_placeholders={
+                "warnings": "\n".join(getattr(self, "_mapping_warnings", []))
+            },
         )

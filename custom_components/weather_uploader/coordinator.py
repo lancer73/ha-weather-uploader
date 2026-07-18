@@ -128,12 +128,19 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         interval: int,
     ) -> None:
         """Initialise the coordinator."""
+        # config_entry is required: recent Home Assistant refuses
+        # async_config_entry_first_refresh() unless the coordinator is
+        # linked to its entry. Omitting it fails setup with a misleading
+        # "No setup function defined" error. Needs HA >= 2024.8.
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(seconds=interval),
         )
+        # self.config_entry is set by the base class above; keep a plain
+        # alias for readability in entities that reference it.
         self.entry = entry
         self.uploaders = uploaders
         merged = {**entry.data, **entry.options}
