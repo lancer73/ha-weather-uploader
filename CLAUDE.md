@@ -1,0 +1,415 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
+
+## What this is
+
+A Home Assistant custom integration that reads mapped sensor entities on
+an interval and pushes observations to several public weather networks.
+No polling of external services, no incoming data. Purely outbound.
+
+## Working style for this repo
+
+- **Minimal diffs.** Change only what the task requires. Do not
+  reformat, reorder imports, or "tidy" adjacent code.
+- **Say when unsure.** If provider API behaviour cannot be verified,
+  say so in the response and mark it in the code or docs. Do not present
+  a guess as fact. There are already unverified items in this repo
+  (see below) and they are labelled as such deliberately.
+- **No flattery.** Skip preamble. Lead with the answer or the diff.
+- **SemVer strictly.** See Versioning below.
+- **Keep a Changelog format.** See Changelog below.
+
+## Layout
+
+```
+custom_components/weather_uploader/
+├── __init__.py           setup/unload, uploader construction
+├── manifest.json         version lives here too
+├── const.py              DOMAIN, SENSOR_KEYS, service ids, hosts
+├── config_flow.py        3-step config flow + options flow
+├── coordinator.py        entity read, unit normalization, fan-out
+├── binary_sensor.py      one status entity per network
+├── translations/en.json  all user-facing strings
+├── brand/                icon.png + icon@2x.png (generated)
+└── uploaders/
+    ├── __init__.py       build_uploader() factory
+    ├── base.py           BaseUploader ABC + unit helper functions
+    ├── wunderground.py
+    ├── wowbe.py          WOW-BE via its WeatherUnderground endpoint
+    ├── cwop.py           CWOP over NATIVE APRS/TCP - not HTTP
+    ├── wetternetzwerk.py Wetternetzwerk.pro - WU protocol clone
+    ├── meteo_services.py Meteo-Services - metric, NO AUTHENTICATION
+    ├── pwsweather.py
+    ├── windy.py          JSON POST, metric
+    └── openweathermap.py JSON POST, SI
+```
+
+## Architecture
+
+**Data flow, once per interval:**
+
+1. `UploadCoordinator._async_update_data` calls `read_sensors()`.
+2. `read_sensors()` walks `self._map` (key → entity_id), reads each
+   state, rejects non-numeric and unavailable states, then converts to
+   the internal unit via `_convert()` using the entity's declared
+   `unit_of_measurement`.
+3. If the resulting dict is empty, the cycle is skipped. No empty
+   uploads.
+4. Otherwise every uploader's `send()` is awaited in parallel via
+   `asyncio.gather(..., return_exceptions=True)`.
+5. Results become `{"data": ..., "results": ..., "errors": ...}`, which
+   the binary sensors read.
+
+**Staleness is not optional, and it MUST use `last_reported`.**
+`read_sensors()` drops any reading whose `_reported_at(state)` is older
+than `max_sensor_age`. Two rules, both learned the hard way:
+
+1. **Never `last_updated`.** HA's state machine discards a write when
+   state and attributes are unchanged: it refreshes `last_reported` and
+   leaves `last_updated` alone. For weather, constant values are normal
+   — rain sits at 0.0 for days, solar and UV sit at 0.0 every night.
+   Keying on `last_updated` drops rain from nearly every payload and
+   drops solar/UV nightly. Worse, it *cannot detect the failure it was
+   written for*: a healthy dry rain sensor and a dead station have
+   identical `last_updated`. Only `last_reported` separates them. This
+   was a real bug, caught in review — do not reintroduce it.
+2. **Never remove the check.** It is the only thing between a dead
+   station and publishing its last reading to NOAA forever. A stale
+   value passes every other check: not unknown, not unavailable, parses
+   as a float.
+
+The default (3600s) only needs to exceed the station's *reporting*
+interval, not its rate of change. It is a heuristic, not a contract.
+
+`_reported_at()` keeps a `getattr` fallback to `last_updated` for cores
+older than 2024.4. `hacs.json` requires 2024.6.0, so it should never
+fire; leave it.
+
+**Two entities, two questions.** `UploadStatusEntity` answers "is the
+network accepting our data". `SourceDataEntity` answers "is our data
+real". They are independent: a dead station produces green uploads. Do
+not merge them or derive one from the other.
+
+**Throttling.** The coordinator polls on one global cadence, but each
+uploader gates itself via `is_due()` / `mark_sent()` against
+`MIN_SERVICE_INTERVAL[service]`. Networks that are not due are skipped
+for that tick and keep their previous status (`_carry_forward`). Two
+non-obvious choices, both deliberate:
+
+- **Throttle on attempt, not success.** A failed request still consumed
+  the provider's rate budget; retrying immediately makes a 429 worse.
+- **`time.monotonic()`, not wall clock.** An NTP step or DST change must
+  not stall an uploader for hours.
+
+**Internal units** are defined in the comment block above `SENSOR_KEYS`
+in `const.py`. That comment is the contract. Uploaders convert *from*
+these; nothing converts *to* them except the coordinator.
+
+**Adding a network** means adding one file under `uploaders/`,
+subclassing `BaseUploader`, implementing `build_params()`, and wiring it
+into `build_uploader()` and `SERVICES`. Override `send()` only if the
+transport differs from GET-with-query-params (Windy and OWM do; they
+POST JSON).
+
+## Invariants — do not break these
+
+1. **Credentials never enter the payload dict.** `build_params()` may
+   add them, but the dict the coordinator passes around and exposes via
+   the `last_payload` attribute must contain sensor values only. Entity
+   attributes are visible in the states API, templates, and diagnostics.
+2. **Never log request parameters.** Every provider except Windy carries
+   the credential in the query string. Log response bodies only, and
+   truncate to 200 chars (`_BODY_LOG_LIMIT` in `base.py`).
+3. **No validation on the credential field.** WOW-BE documents the
+   field as "PIN code or Password" and the Met Office no longer
+   restricts it to 6 digits. Any length or charset check rejects valid
+   credentials. This is intentional, not an oversight — see the
+   docstring on `_password_selector()`.
+4. **Credentials stay out of the options flow.** HA stores options
+   separately from entry data. Putting a secret in options writes it to
+   `.storage` twice. Rotation is remove-and-re-add. If someone asks for
+   in-place rotation, implement `async_step_reauth`, not an options
+   field.
+5. **`_prune()` before sending.** Unmapped fields must be absent, not
+   empty-string. Several providers treat `param=` as a zero.
+6. **One network failing must not affect others.** Keep the
+   `return_exceptions=True` on the gather.
+
+## Provider quirks
+
+- **Met Office WOW (UK) is gone.** Removed in 3.0.0: retirement began
+  01/2026, full decommissioning late 2026, and the Met Office does not
+  permit migration to third parties. The endpoint still answers (400 on
+  a bad request, not 404) — do not take that as a reason to restore it.
+  Do not add `wow.metoffice.gov.uk` back.
+- **WOW-BE `rainin` is a rate** (in/h), fed from `rain_rate`. The legacy
+  WOW-UK protocol used `rainin` for an hourly accumulation, and
+  `wunderground.py` (the real WU service) still does. Same name, two
+  meanings, two uploaders. Do not "fix" the inconsistency.
+- **WOW-BE `visibility` is km,** not miles. Do not add a `km_to_mi` call
+  to `wowbe.py`. `wunderground.py` does convert to miles — that is
+  correct for the actual WU service.
+- **Pressure:** WU, PWS, OWM want sea-level-adjusted
+  (`pressure_relative`). Windy wants station pressure
+  (`pressure_absolute`) and adjusts itself. WOW-BE takes both, split
+  into `baromin` (relative, authoritative) and `absbaromin` (absolute).
+  Getting this wrong yields plausible, wrong data. Do not "simplify"
+  these to one field.
+- **WU-derived APIs** (WU, PWS) share parameter names but not
+  parameter sets. Do not assume a param exists on all three because it
+  exists on one.
+- **`dateutc`** must be `%Y-%m-%d %H:%M:%S` in UTC. Not ISO-8601. This
+  is verified against the WOW-BE server: it accepts that format.
+- **OWM** needs a station created via its API first. This integration
+  does not do that.
+- **Windy** takes the key in the URL path, not a param.
+- **WOW-BE rate limits:** 20/min/site, 600/min/IP, HTTP 429 on excess.
+  Do not add retry-on-429 without backoff.
+
+## CWOP is native APRS, not HTTP
+
+`cwop.py` opens a TCP socket to `cwop.aprs.net:14580` and speaks APRS-IS
+directly. Do not replace this with an HTTP bridge (send.cwop.rest or
+similar), however much simpler it looks:
+
+- A bridge is an unaffiliated third party that would see every
+  observation, the station ID, and the user's exact coordinates.
+- It holds no credential for us. CWOP non-ham auth is the literal
+  passcode `-1`. The bridge saves a socket, nothing more.
+
+`build_packet()` is a pure function and is tested byte-for-byte against
+the worked example in NOAA's FAQ. If a test there fails, the packet
+format is wrong -- check http://wxqa.com/faq.html before touching the
+test.
+
+Packet gotchas, all deliberate:
+
+- Wind dir, speed, gust, temp are **positional and required**; missing
+  values are `...`, not omitted.
+- `b` is tenths of a millibar, five digits. `h00` means 100%.
+- `t` is Fahrenheit in three chars; negatives are `-04`, not `-4`.
+- **MADIS ingests only `r` (hourly) and `p` (24h) rain.** `P` (since
+  midnight) is sent but ignored. That is why `rain_24h` exists as a
+  separate sensor key -- do not "simplify" it away.
+- NOAA's rate limit (1 packet / 5 min) is a published rule, unlike most
+  of `MIN_SERVICE_INTERVAL`. Do not lower it.
+
+## Meteo-Services has no authentication
+
+Station ID only, no key. We implement it anyway -- unlike the Ecowitt
+protocol below -- because there is no authenticated alternative on that
+network: it is these terms or no participation. The Ecowitt case was
+different because WOW-BE offers a key-authenticated endpoint for the
+same network.
+
+The config flow uses a separate `credentials_open` step that states the
+trade and shows **no password field**. Do not add one.
+
+The server returns 200 with an empty body regardless of outcome, so
+`send()` can only report transport success. Do not claim otherwise in
+the UI.
+
+Its API accepts `et` and `humidex`; we do not send them. Deriving them
+well needs inputs we do not collect, and a plausible wrong number is
+worse than an absent one. Do not add them "for completeness".
+
+## Why there is no Ecowitt uploader
+
+WOW-BE exposes `/send/ecowitt`. It is deliberately not implemented, and
+that is a security decision, not an oversight.
+
+That endpoint has **no authentication**. The station is identified by
+`PASSKEY`, an MD5 of its registered MAC. A MAC is not a secret: it is
+broadcast on the local network, is 48 bits with a public 24-bit vendor
+OUI, and the residual ~2^24 space falls to unsalted MD5 in well under a
+second. The endpoint's responses are 200/422/429 — no 403, because there
+is nothing to reject. Compare `/send/weatherunderground`, which does
+define "403 Invalid site credentials".
+
+It exists so off-the-shelf station firmware, which cannot send an
+arbitrary key, can reach WOW-BE at all. Home Assistant can send a key.
+There is no reason to offer the weaker path.
+
+If asked to add it back: raise the above first. It was written, then
+removed on purpose.
+
+## Verified facts — do not re-litigate
+
+WOW-BE was verified on 2026-07-16 against the OpenAPI 3.1 spec at
+<https://wow.meteo.be/docs/api/> (inlined in the page as
+`docs.apiDescriptionDocument`, not served as a standalone file), the
+AGPL server source, and the live endpoint. Settled:
+
+- Endpoint `POST /api/v2/send/weatherunderground`, JSON body.
+  `/automaticreading` 404s on this host.
+- Auth is the `PASSWORD` body field. `securitySchemes` is empty; there
+  is no Basic, bearer, or header scheme. "PIN code or Password" — one
+  field, both styles, no mode selector needed.
+- Required: `ID`, `PASSWORD`, `dateutc`.
+- Responses: 200 ok, 403 invalid credentials, 422 validation, 429 rate
+  limited (20/min/site, 600/min/IP).
+- **`ID` accepts a short ID *or* a UUID.** The 422 message names
+  whichever form it detected ("must be a valid site short ID" vs "...
+  site UUID"), which is easy to misread as an exclusive requirement. It
+  is not. Do not add client-side ID format validation.
+- **The endpoint accepts GET with query params too.** It is Laravel and
+  merges query into input. We use POST+JSON so the credential stays out
+  of URL logs — that is our choice, not something the API enforces. Do
+  not "simplify" to a GET.
+- **`dateutc` must be `Y-m-d H:i:s`, UTC.** The server rejects an
+  ISO-8601 offset with "The dateutc field must match the format
+  Y-m-d H:i:s". The spec's `format: date-time` is wrong. `...Z` happens
+  to parse, but do not rely on it. `DATEUTC_FORMAT` in `wowbe.py` is the
+  verified value — do not "modernise" it to `isoformat()`.
+- **`baromin` beats `absbaromin`.** Both sent -> `absbaromin` discarded.
+  Only `absbaromin` sent -> server derives relative from the registered
+  altitude. So `build_params` sends exactly one, never both. Do not
+  "simplify" that branch into sending both.
+- Protocol choice: `/send/weatherunderground` (16 measurement fields)
+  over `/send/wow` (15). The only difference is `UV`. Both have
+  identical auth and an identical 403. Do not switch to `/send/wow`
+  "for consistency with the platform name" — it strictly loses a field.
+
+If asked to add an `auth_mode` back, or to support HTTP Basic for WOW:
+don't. It was removed in 2.0.0 as speculative and unsupported. An option
+that can only produce 403 is worse than no option.
+
+## Still unverified
+
+- **The CWOP APRS socket path has never run against a live server.**
+  `build_packet()` is verified byte-for-byte against NOAA's example, but
+  that only covers the wire *format*. The connect/login/send sequence in
+  `send()` is written from the FAQ and is unexercised. Do not treat the
+  passing packet tests as evidence that CWOP uploads work.
+- **No end-to-end upload has ever succeeded.** Every WOW-BE check used
+  bogus credentials and stopped at 422 on the site id. That proves the
+  endpoint, method, body shape, field names, and `dateutc` format are
+  right; it does not prove a real observation lands. Only a registered
+  station can confirm that.
+- **The test suite has never run.** Importing the package pulls in Home
+  Assistant, so `pytest` needs `pytest-homeassistant-custom-component`.
+  Uploader logic was verified by importing the modules with HA stubbed
+  out. `coordinator.py` has no test coverage at all.
+- OWM station registration is not implemented; station ids must be
+  created out-of-band.
+- Whether the poll cadence satisfies what WOW-BE means by an
+  "instantaneous" rain rate. The field is documented; the tolerance is
+  not.
+- `MIN_SERVICE_INTERVAL` for PWSWeather, OpenWeatherMap, and Weather
+  Underground are conservative guesses. Only WOW-BE (60 s, RMI) and
+  Windy (~5 min) come from documentation. Do not lower any of them
+  without a citation.
+
+Keep these labelled. If asked to "clean up the docs", they stay.
+
+## Brand images
+
+`custom_components/weather_uploader/brand/` holds `icon.png` (256x256)
+and `icon@2x.png` (512x512). HA serves these directly for custom
+integrations since 2026.3; no PR to `home-assistant/brands` is needed,
+and the `custom_integrations/` folder in that repo is now legacy.
+
+**The PNGs are generated. Do not hand-edit them.** Source of truth is
+`brand_src/icon.svg`; re-render with `python tools/render_brand.py`.
+
+Spec constraints that the renderer enforces, per the brands repo README:
+1:1 aspect, 256/512 px, PNG, transparency, trimmed of dead margin. The
+artwork is ~1.1:1, so the renderer pads the short axis symmetrically
+rather than stretching — that is deliberate, not a bug to "fix".
+
+No `logo.png`: a square icon is used as the logo fallback. No
+`dark_icon.png`: the icon was checked against both light and the HA dark
+background at 24-256 px and reads on both.
+
+**Custom integrations must not use Home Assistant branded imagery** —
+it implies official status. The current icon (cloud + upload arrow) is
+deliberately generic and borrows no provider's mark.
+
+## Versioning
+
+**Nothing has been released. Do not invent version numbers.** The
+manifest currently holds a `0.0.0` placeholder and the changelog has a
+single `[Unreleased]` section. The maintainer decides when and what to
+release; ask rather than bumping.
+
+Once a first version exists, Semantic Versioning 2.0.0 applies.
+
+- **MAJOR** — config entry schema changes requiring migration, removing
+  a sensor key, removing a network, or changing an internal unit.
+- **MINOR** — new network, new sensor key, new optional config, new
+  entity.
+- **PATCH** — fixes, docs, wrong-unit corrections, dependency bumps.
+
+`version` in `manifest.json` and the heading in `CHANGELOG.md` must
+match on every release. A release commit touches both.
+
+Until then, accumulate changes under `[Unreleased]` and leave the
+manifest placeholder alone.
+
+Any change to `SENSOR_KEYS` ordering or naming, or to the internal unit
+contract, needs a config entry migration and a `VERSION` bump in
+`config_flow.py`. Do not silently reinterpret existing stored keys.
+
+## Changelog
+
+Keep a Changelog 1.1.0. Sections in this order, omitting empty ones:
+`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
+
+- Every user-visible change gets an entry under `[Unreleased]` in the
+  same commit.
+- Security-relevant changes go under `Security`, always. This repo
+  handles credentials and publishes location data; that section is not
+  optional decoration.
+- On release: rename `[Unreleased]` to the version with an ISO date, add
+  a fresh empty `[Unreleased]`, update the link refs at the bottom. The
+  maintainer decides this, not you.
+- `Known issues` is a non-standard section used here at the bottom of a
+  release. Keep it.
+
+## Style
+
+- Python 3.12+, `from __future__ import annotations` at the top of every
+  module.
+- Full type hints. `dict[str, float]`, not `Dict`.
+- Ruff for lint and format. Line length 88.
+- Docstrings on every module, class, and public method. HA's own
+  convention: imperative mood, one line where possible.
+- `_LOGGER.debug` for normal operation, `warning` for a failed upload
+  (recoverable, expected), `error` only for unexpected exceptions.
+- Async everywhere. Never block the event loop. Use
+  `async_get_clientsession(hass)` — never create a session.
+- Use `homeassistant.util.unit_conversion` converters, not hand-rolled
+  math, for anything HA already supports. The helpers in `base.py` exist
+  only for provider-specific output units HA has no converter for.
+
+## Testing
+
+```bash
+ruff check custom_components/
+ruff format --check custom_components/
+pytest
+```
+
+Uploaders are pure functions from a data dict to a params dict — test
+`build_params()` directly, no HTTP mocking needed. Test `send()`
+separately with `aioresponses`.
+
+Do not hit the live WOW-BE endpoint in tests. It is rate limited per IP
+and CI would trip it. The protocol assertions in `test_uploaders.py`
+(endpoint path, required fields, rain-rate semantics, km visibility,
+split pressure) exist to catch regressions against the verified spec —
+if one fails, check the spec before changing the test.
+
+Coordinator tests should cover: missing entity, unavailable state,
+non-numeric state, missing unit attribute, unit conversion, empty-data
+skip, and one uploader raising while another succeeds.
+
+## Do not
+
+- Add a dependency to `requirements` without a strong reason. It is
+  currently empty and that is a feature.
+- Add YAML configuration. Config flow only.
+- Cache credentials anywhere outside the config entry.
+- Add telemetry, analytics, or a "phone home" check.
+- Widen the entity selector beyond numeric domains.
