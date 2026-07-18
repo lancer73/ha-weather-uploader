@@ -53,10 +53,53 @@
       "confirm_mapping": {
         "title": "Check sensor mapping",
         "description": "Some mappings look unusual. You can still continue — these are warnings, not errors, and are often fine for custom or DIY sensors.\n\n{warnings}\n\nSelect Submit to save the mapping as-is, or go back to change it."
+      },
+      "owm_station": {
+        "title": "OpenWeatherMap setup",
+        "description": "OpenWeatherMap stations are created through its API — there is no website signup, and the station ID you need for uploads only exists once a station has been created.\n\nEnter your OpenWeatherMap API key, then choose whether to create a new station now or use the internal ID of one you already have.",
+        "data": {
+          "key": "API key",
+          "mode": "Station"
+        },
+        "data_description": {
+          "key": "Your OpenWeatherMap API key (from the API keys tab of your account).",
+          "mode": "Create a new station, or enter an existing internal station ID."
+        }
+      },
+      "owm_create": {
+        "title": "Create OpenWeatherMap station",
+        "description": "This registers a new station on your OpenWeatherMap account and stores the internal ID it returns. If a station with the same identifier already exists, it is reused rather than duplicated.",
+        "data": {
+          "external_id": "Station identifier",
+          "name": "Station name",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "altitude": "Altitude"
+        },
+        "data_description": {
+          "external_id": "A short label of your choosing (letters, digits, underscores). Not the internal ID — OpenWeatherMap generates that.",
+          "name": "A display name for the station on OpenWeatherMap.",
+          "latitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
+          "longitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
+          "altitude": "Station ground elevation in metres above sea level."
+        }
+      },
+      "owm_existing": {
+        "title": "Existing OpenWeatherMap station",
+        "description": "Enter the internal station ID (a long hexadecimal string like 583436dd9643a9000196b8d6). You can find it in the API response when the station was created, or by listing your stations via the API.",
+        "data": {
+          "station_id": "Internal station ID"
+        },
+        "data_description": {
+          "station_id": "The internal ID OpenWeatherMap generated for the station — not the label you chose."
+        }
       }
     },
     "error": {
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "invalid_auth": "OpenWeatherMap rejected the API key. Check it and try again.",
+      "cannot_connect": "Could not reach OpenWeatherMap. Check your connection and try again.",
+      "cannot_create": "OpenWeatherMap could not create the station. Its response is in the log."
     },
     "abort": {
       "already_configured": "This uploader is already configured."
@@ -93,6 +136,12 @@
         "openweathermap": "OpenWeatherMap",
         "wetternetzwerk": "Wetternetzwerk.pro (Germany)",
         "meteo_services": "Meteo-Services (Germany, no authentication)"
+      }
+    },
+    "owm_mode": {
+      "options": {
+        "create": "Create a new station",
+        "existing": "Use an existing station ID"
       }
     }
   },
