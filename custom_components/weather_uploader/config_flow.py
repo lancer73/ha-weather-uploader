@@ -11,6 +11,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
+from homeassistant.const import ATTR_DEVICE_CLASS, ATTR_UNIT_OF_MEASUREMENT
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
@@ -26,6 +27,7 @@ from .const import (
     DEFAULT_INTERVAL,
     DEFAULT_MAX_SENSOR_AGE,
     DOMAIN,
+    EXPECTED_DEVICE_CLASS,
     GEO_SERVICES,
     MIN_INTERVAL,
     SENSOR_KEYS,
@@ -90,6 +92,48 @@ def _password_selector() -> selector.TextSelector:
     )
 
 
+def _mapping_warnings(hass, mapping: dict[str, Any]) -> list[str]:
+    """Return human-readable warnings for a proposed sensor mapping.
+
+    Two non-blocking checks:
+
+    - the mapped entity's device_class does not match what the field
+      expects (e.g. a humidity sensor mapped to a temperature field), and
+    - the mapped entity declares no unit_of_measurement, so runtime unit
+      conversion cannot verify or correct it and must assume the value is
+      already in the field's internal unit.
+
+    Both are advisory. Many valid weather sensors -- templates, ESPHome,
+    DIY hardware -- omit device_class or units, so these are surfaced for
+    confirmation, never enforced.
+    """
+    warnings: list[str] = []
+    for key in SENSOR_KEYS:
+        entity_id = mapping.get(key)
+        if not entity_id:
+            continue
+        state = hass.states.get(entity_id)
+        if state is None:
+            # A freshly picked entity should exist; if not, the runtime
+            # missing-sensor path will report it. Nothing to warn here.
+            continue
+
+        expected = EXPECTED_DEVICE_CLASS.get(key)
+        actual = state.attributes.get(ATTR_DEVICE_CLASS)
+        if expected and actual and actual != expected:
+            warnings.append(
+                f"{key}: mapped to {entity_id}, which is a "
+                f"'{actual}' sensor, not '{expected}'"
+            )
+
+        if state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) is None:
+            warnings.append(
+                f"{key}: {entity_id} declares no unit, so its value is "
+                f"assumed to already be in the expected unit"
+            )
+    return warnings
+
+
 def _sensor_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     """Build the sensor mapping schema, pre-filled from defaults."""
     defaults = defaults or {}
@@ -112,6 +156,8 @@ class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
         self._services: dict[str, dict[str, Any]] = {}
         self._pending: list[str] = []
         self._interval: int = DEFAULT_INTERVAL
+        self._mapping: dict[str, Any] = {}
+        self._mapping_warnings: list[str] = []
 
     @staticmethod
     @callback
@@ -205,16 +251,39 @@ class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Map Home Assistant entities onto weather fields."""
         if user_input is not None:
-            return self.async_create_entry(
-                title="Weather Network Uploader",
-                data={
-                    CONF_SERVICES: self._services,
-                    CONF_INTERVAL: int(self._interval),
-                    CONF_MAX_SENSOR_AGE: DEFAULT_MAX_SENSOR_AGE,
-                    **user_input,
-                },
-            )
+            self._mapping = user_input
+            warnings = _mapping_warnings(self.hass, user_input)
+            if warnings:
+                # Something looks off, but the user is allowed to proceed.
+                # Show the warnings on a confirm step rather than blocking.
+                self._mapping_warnings = warnings
+                return await self.async_step_confirm_mapping()
+            return self._finish_entry(user_input)
         return self.async_show_form(step_id="sensors", data_schema=_sensor_schema())
+
+    async def async_step_confirm_mapping(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show non-blocking mapping warnings and let the user proceed."""
+        if user_input is not None:
+            return self._finish_entry(self._mapping)
+        return self.async_show_form(
+            step_id="confirm_mapping",
+            data_schema=vol.Schema({}),
+            description_placeholders={"warnings": "\n".join(self._mapping_warnings)},
+        )
+
+    def _finish_entry(self, mapping: dict[str, Any]) -> ConfigFlowResult:
+        """Create the config entry from the collected mapping."""
+        return self.async_create_entry(
+            title="Weather Network Uploader",
+            data={
+                CONF_SERVICES: self._services,
+                CONF_INTERVAL: int(self._interval),
+                CONF_MAX_SENSOR_AGE: DEFAULT_MAX_SENSOR_AGE,
+                **mapping,
+            },
+        )
 
 
 class WeatherUploaderOptionsFlow(OptionsFlow):
@@ -226,6 +295,11 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
     a key.
     """
 
+    def __init__(self) -> None:
+        """Initialise options flow state."""
+        self._pending_options: dict[str, Any] = {}
+        self._mapping_warnings: list[str] = []
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -236,6 +310,12 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
             cleaned[CONF_MAX_SENSOR_AGE] = int(
                 cleaned.get(CONF_MAX_SENSOR_AGE, DEFAULT_MAX_SENSOR_AGE)
             )
+            mapping = {k: v for k, v in cleaned.items() if k in SENSOR_KEYS}
+            warnings = _mapping_warnings(self.hass, mapping)
+            if warnings:
+                self._pending_options = cleaned
+                self._mapping_warnings = warnings
+                return await self.async_step_confirm_mapping()
             return self.async_create_entry(title="", data=cleaned)
 
         current = {**self.config_entry.data, **self.config_entry.options}
@@ -259,3 +339,15 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
         }
         schema.update(_sensor_schema(current).schema)
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
+
+    async def async_step_confirm_mapping(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show non-blocking mapping warnings and let the user proceed."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=self._pending_options)
+        return self.async_show_form(
+            step_id="confirm_mapping",
+            data_schema=vol.Schema({}),
+            description_placeholders={"warnings": "\n".join(self._mapping_warnings)},
+        )

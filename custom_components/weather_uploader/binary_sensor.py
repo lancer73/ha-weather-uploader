@@ -15,6 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    ATTR_IMPLAUSIBLE_SENSORS,
     ATTR_LAST_ERROR,
     ATTR_LAST_PAYLOAD,
     ATTR_MISSING_SENSORS,
@@ -115,8 +116,11 @@ class SourceDataEntity(_BaseEntity):
     entity stays green while the published observations are hours old.
 
     This entity goes to ``on`` (problem) when nothing publishable
-    remains, and names the stale and missing fields in its attributes
-    so the cause is visible without reading the log.
+    remains, and names the stale, missing, and implausible fields in
+    its attributes so the cause is visible without reading the log.
+    An implausible field is one whose value fell outside the sane range
+    for that measurement -- usually a wrong sensor mapping or a unit
+    mismatch.
     """
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
@@ -141,5 +145,6 @@ class SourceDataEntity(_BaseEntity):
             ATTR_SENSOR_COUNT: len(data.get("data", {})),
             ATTR_STALE_SENSORS: sorted(self.coordinator.stale_sensors),
             ATTR_MISSING_SENSORS: sorted(self.coordinator.missing_sensors),
+            ATTR_IMPLAUSIBLE_SENSORS: sorted(self.coordinator.implausible_sensors),
             "max_sensor_age": self.coordinator.max_sensor_age,
         }

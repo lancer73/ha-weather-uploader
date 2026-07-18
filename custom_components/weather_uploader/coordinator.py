@@ -31,6 +31,7 @@ from .const import (
     CONF_MAX_SENSOR_AGE,
     DEFAULT_MAX_SENSOR_AGE,
     DOMAIN,
+    PLAUSIBLE_RANGE,
     SENSOR_KEYS,
 )
 from .uploaders import BaseUploader
@@ -72,6 +73,25 @@ def _reported_at(state: State) -> datetime:
     honest rather than raising AttributeError on an old core.
     """
     return getattr(state, "last_reported", None) or state.last_updated
+
+
+def _is_plausible(key: str, value: float) -> bool:
+    """Return True when a converted value is within the field's range.
+
+    The value is already in internal units here, so the bounds in
+    PLAUSIBLE_RANGE apply directly. A field with no range entry, or a
+    None bound, is unconstrained on that side. The ranges are wide by
+    design: they exist to catch a mis-mapping or a wrong unit (a
+    pressure of 101325 where hPa is expected, humidity feeding a
+    temperature field), not to judge real weather.
+    """
+    bounds = PLAUSIBLE_RANGE.get(key)
+    if bounds is None:
+        return True
+    low, high = bounds
+    if low is not None and value < low:
+        return False
+    return not (high is not None and value > high)
 
 
 # Target unit per sensor key. Keys absent here are passed through as-is.
@@ -127,6 +147,7 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Populated by read_sensors() on every cycle, for diagnostics.
         self.stale_sensors: list[str] = []
         self.missing_sensors: list[str] = []
+        self.implausible_sensors: list[str] = []
 
     def read_sensors(self) -> dict[str, float]:
         """Collect, validate, and normalize every mapped sensor value.
@@ -154,6 +175,7 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         result: dict[str, float] = {}
         stale: list[str] = []
         missing: list[str] = []
+        implausible: list[str] = []
         now = dt_util.utcnow()
 
         for key, entity_id in self._map.items():
@@ -207,10 +229,25 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if value is None:
                 missing.append(key)
                 continue
+
+            if not _is_plausible(key, value):
+                implausible.append(key)
+                _LOGGER.warning(
+                    "Mapped entity %s (%s) reported %.4g, outside the "
+                    "plausible range for this field; not publishing it. "
+                    "This usually means the wrong sensor is mapped, or its "
+                    "unit differs from what Home Assistant reports.",
+                    entity_id,
+                    key,
+                    value,
+                )
+                continue
+
             result[key] = value
 
         self.stale_sensors = stale
         self.missing_sensors = missing
+        self.implausible_sensors = implausible
         if stale:
             _LOGGER.warning(
                 "Not publishing %d stale reading(s): %s. Their entities have "

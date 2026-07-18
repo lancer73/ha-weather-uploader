@@ -36,6 +36,86 @@ MIN_INTERVAL: Final = 60
 #   lightning_count                        : count
 #   lightning_distance / visibility        : km
 #   cloud_base                             : m
+# --- Sensor mapping validation metadata ------------------------------
+#
+# For each field: the HA device_class its source entity is expected to
+# carry, and a plausible-value range in this integration's INTERNAL
+# unit (see the unit table above). Both are advisory:
+#
+# - device_class drives a soft warning in the config flow when a mapped
+#   entity's class does not match. It does not block the mapping: many
+#   legitimate weather sensors (templates, ESPHome, DIY hardware) ship
+#   with no device_class or an approximate one, and this integration's
+#   audience runs exactly those. A wrong class is a hint, not proof.
+#
+# - The range drives a runtime plausibility check. A reading outside it
+#   is dropped for that cycle and surfaced on the source-data problem
+#   sensor, not published. Ranges are deliberately wide: the goal is to
+#   catch a mis-mapping (humidity feeding a temperature field) or a bad
+#   unit (Pascals where hPa is expected), not to second-guess real
+#   weather. None means "no meaningful bound" (e.g. cumulative rain).
+#
+# device_class values are Home Assistant SensorDeviceClass strings.
+# A field absent from a table simply has no check of that kind.
+
+EXPECTED_DEVICE_CLASS: Final[dict[str, str]] = {
+    "temperature": "temperature",
+    "dewpoint": "temperature",
+    "indoor_temperature": "temperature",
+    "soil_temperature": "temperature",
+    "humidity": "humidity",
+    "indoor_humidity": "humidity",
+    "pressure_absolute": "pressure",
+    "pressure_relative": "pressure",
+    "wind_speed": "wind_speed",
+    "wind_gust": "wind_speed",
+    "solar_radiation": "irradiance",
+    "illuminance": "illuminance",
+    "pm25": "pm25",
+    "pm10": "pm10",
+    "co2": "carbon_dioxide",
+    "visibility": "distance",
+    "cloud_base": "distance",
+    "lightning_distance": "distance",
+    # Fields with no standard device_class (wind_direction, uv_index,
+    # rain_*, soil_moisture, leaf_wetness, lightning_count) are omitted:
+    # HA has no class for them, so a mismatch check would misfire.
+}
+
+# (low, high) inclusive, in internal units. None = unbounded on that end.
+PLAUSIBLE_RANGE: Final[dict[str, tuple[float | None, float | None]]] = {
+    "temperature": (-90.0, 60.0),
+    "dewpoint": (-90.0, 60.0),
+    "indoor_temperature": (-40.0, 80.0),
+    "soil_temperature": (-40.0, 80.0),
+    "humidity": (0.0, 100.0),
+    "indoor_humidity": (0.0, 100.0),
+    "soil_moisture": (0.0, 100.0),
+    "leaf_wetness": (0.0, 100.0),
+    "pressure_absolute": (300.0, 1100.0),
+    "pressure_relative": (870.0, 1085.0),
+    "wind_speed": (0.0, 130.0),
+    "wind_gust": (0.0, 150.0),
+    "wind_direction": (0.0, 360.0),
+    "wind_gust_direction": (0.0, 360.0),
+    "rain_rate": (0.0, 400.0),
+    "rain_hourly": (0.0, 400.0),
+    "rain_24h": (0.0, 2000.0),
+    "rain_daily": (0.0, 2000.0),
+    "solar_radiation": (0.0, 1500.0),
+    "uv_index": (0.0, 20.0),
+    "illuminance": (0.0, 200000.0),
+    "pm25": (0.0, 1000.0),
+    "pm10": (0.0, 2000.0),
+    "co2": (0.0, 40000.0),
+    "lightning_count": (0.0, None),
+    "lightning_distance": (0.0, 100.0),
+    "visibility": (0.0, 100.0),
+    "cloud_base": (0.0, 15000.0),
+    # Cumulative totals (rain_weekly/monthly/yearly) have no useful upper
+    # bound and are intentionally omitted.
+}
+
 SENSOR_KEYS: Final[list[str]] = [
     "temperature",
     "dewpoint",
@@ -147,4 +227,5 @@ ATTR_LAST_ERROR: Final = "last_error"
 ATTR_LAST_SUCCESS: Final = "last_success"
 ATTR_STALE_SENSORS: Final = "stale_sensors"
 ATTR_MISSING_SENSORS: Final = "missing_sensors"
+ATTR_IMPLAUSIBLE_SENSORS: Final = "implausible_sensors"
 ATTR_SENSOR_COUNT: Final = "sensors_published"
