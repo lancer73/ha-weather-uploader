@@ -138,9 +138,10 @@ POST JSON).
 
 ## Provider quirks
 
-- **Met Office WOW (UK) is gone.** Removed in 3.0.0: retirement began
-  01/2026, full decommissioning late 2026, and the Met Office does not
-  permit migration to third parties. The endpoint still answers (400 on
+- **Met Office WOW (UK) is not supported.** It was dropped during
+  development: retirement began 01/2026, full decommissioning late 2026,
+  and the Met Office does not permit migration to third parties. The
+  endpoint still answers (400 on
   a bad request, not 404) — do not take that as a reason to restore it.
   Do not add `wow.metoffice.gov.uk` back.
 - **WOW-BE `rainin` is a rate** (in/h), fed from `rain_rate`. The legacy
@@ -272,8 +273,9 @@ AGPL server source, and the live endpoint. Settled:
   "for consistency with the platform name" — it strictly loses a field.
 
 If asked to add an `auth_mode` back, or to support HTTP Basic for WOW:
-don't. It was removed in 2.0.0 as speculative and unsupported. An option
-that can only produce 403 is worse than no option.
+don't. It was tried during development and dropped as speculative and
+unsupported. An option that can only produce 403 is worse than no
+option.
 
 ## Still unverified
 
@@ -328,12 +330,13 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-**Nothing has been released. Do not invent version numbers.** The
-manifest currently holds a `0.0.0` placeholder and the changelog has a
-single `[Unreleased]` section. The maintainer decides when and what to
-release; ask rather than bumping.
+Current release: **0.1.0** (first release). Semantic Versioning 2.0.0.
+**Do not bump the version without being asked** — the maintainer decides
+when and what to release.
 
-Once a first version exists, Semantic Versioning 2.0.0 applies.
+Pre-1.0 caveat: while the major is 0, the config schema and entity IDs
+are not yet stable, so a breaking change is a MINOR bump (0.x.0) rather
+than a MAJOR one until 1.0.0 is declared. After 1.0.0:
 
 - **MAJOR** — config entry schema changes requiring migration, removing
   a sensor key, removing a network, or changing an internal unit.
@@ -344,8 +347,7 @@ Once a first version exists, Semantic Versioning 2.0.0 applies.
 `version` in `manifest.json` and the heading in `CHANGELOG.md` must
 match on every release. A release commit touches both.
 
-Until then, accumulate changes under `[Unreleased]` and leave the
-manifest placeholder alone.
+Between releases, accumulate changes under `[Unreleased]`.
 
 Any change to `SENSOR_KEYS` ordering or naming, or to the internal unit
 contract, needs a config entry migration and a `VERSION` bump in

@@ -36,7 +36,7 @@ decommissioning planned for late 2026, and is
 RMI relaunched the platform as WOW-BE with a new backend, extended to
 cover the rest of Europe.
 
-Support for `wow.metoffice.gov.uk` was removed in 3.0.0. The endpoint
+This integration does not support `wow.metoffice.gov.uk`. The endpoint
 still responds as of this writing, but it is on a published path to
 shutdown and no new station should be pointed at it. Re-register at
 [wow.meteo.be/web/login](https://wow.meteo.be/web/login) — Met Office

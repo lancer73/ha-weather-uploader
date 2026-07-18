@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing has been released yet. This section describes the integration as
-it currently stands; it will become the first release entry when a
-version is declared.
+## [0.1.0] - 2026-07-18
+
+First release. Pre-1.0: the configuration schema and entity IDs may
+still change before 1.0.0.
 
 ### Added
 
@@ -201,4 +202,5 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/commits/master/
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/lancer73/ha-weather-uploader/releases/tag/v0.1.0
