@@ -240,6 +240,29 @@ Note also that Meteo-Services returns HTTP 200 with an empty body
 regardless of outcome. A green status entity means "the request was
 accepted", not "the observation was stored".
 
+## OpenWeatherMap stations
+
+OpenWeatherMap is the only supported network with no website signup for
+stations. A station is created through its API, and the `station_id`
+used for uploads is an internal identifier that does not exist until the
+station has been created.
+
+The configuration handles this for you. When you add OpenWeatherMap, the
+setup step asks for your API key and then offers a choice:
+
+- **Create a new station.** You give a short label, a display name, and
+  the station's coordinates and altitude. The integration calls
+  OpenWeatherMap, creates the station, and stores the internal ID it
+  returns. If a station with the same label already exists on your
+  account, it is reused rather than duplicated, so re-adding the
+  integration will not spawn copies.
+- **Use an existing station ID.** If you already created a station (via
+  the API or a previous setup), enter its internal ID directly — the
+  long hexadecimal string, not the label you chose.
+
+A bad API key or a connection problem is reported on the form
+immediately, rather than surfacing later as failed uploads.
+
 ## Station coordinates
 
 CWOP and Meteo-Services require your station's latitude and longitude on

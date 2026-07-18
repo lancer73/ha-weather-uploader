@@ -216,6 +216,26 @@ Packet gotchas, all deliberate:
 - NOAA's rate limit (1 packet / 5 min) is a published rule, unlike most
   of `MIN_SERVICE_INTERVAL`. Do not lower it.
 
+## OpenWeatherMap needs a station created first
+
+OWM is the only network whose `station_id` cannot be obtained from a
+website: it is an internal ID that only exists after
+`POST /data/3.0/stations`. The config flow creates it
+(`uploaders/owm_station.py`), with a manual-ID fallback. Two things not
+to break:
+
+- **Store the internal ID (`ID`/`id`), never the `external_id`.** The
+  external_id is the user's label; the internal ID is what
+  `/measurements` requires. Confusing them makes every upload 404.
+- **Creation is idempotent on purpose.** `create_station` lists
+  existing stations and reuses a matching `external_id` before
+  POSTing, so re-running setup does not spawn duplicates on the user's
+  account. Do not drop the lookup.
+
+Station management is create/list only. We deliberately do not implement
+PUT/DELETE: the integration should not silently mutate or remove a
+user's OWM stations.
+
 ## Meteo-Services has no authentication
 
 Station ID only, no key. We implement it anyway -- unlike the Ecowitt
@@ -350,7 +370,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.2.0**. Semantic Versioning 2.0.0.
+Current release: **0.3.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 

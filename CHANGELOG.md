@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-18
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Added
+
+- OpenWeatherMap station creation in the config flow. OpenWeatherMap has
+  no website signup for stations: the measurement `station_id` is an
+  internal identifier that only exists once a station has been created
+  through the API. Setup now asks for the API key and either creates a
+  station (`POST /data/3.0/stations`, storing the returned internal ID)
+  or accepts an existing internal ID. Creation is idempotent: an
+  existing station with the same `external_id` is reused rather than
+  duplicated, so re-adding the integration does not create copies. API
+  failures (bad key, connectivity, rejected creation) are shown on the
+  form rather than surfacing later as failed uploads. Implemented in
+  `uploaders/owm_station.py`; verified against the Weather Stations API
+  3.0 documentation.
+
+### Changed
+
+- Minimum Home Assistant version raised to 2024.8.0, the release that
+  added the `config_entry` parameter to `DataUpdateCoordinator`.
+- The options flow no longer defines a custom `__init__`. Modern
+  `OptionsFlow` provides `config_entry` as a managed property, and an
+  `__init__` that does not chain to the base class can interfere with
+  it; per-flow state is now initialised lazily.
+
+### Fixed
+
+- Setup failure on recent Home Assistant. The update coordinator was not
+  constructed with its `config_entry`, which newer cores require before
+  `async_config_entry_first_refresh`. On those versions setup raised and
+  Home Assistant reported the misleading "No setup or config entry setup
+  function defined". The coordinator now passes `config_entry` to its
+  base class. This was a latent bug independent of which networks were
+  configured.
+
 ## [0.2.0] - 2026-07-18
 
 Pre-1.0: the configuration schema and entity IDs may still change before
@@ -287,6 +326,7 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lancer73/ha-weather-uploader/releases/tag/v0.1.0
