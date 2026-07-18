@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-18
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Added
+
+- Sensor mapping validation, in three non-blocking layers. At
+  configuration time, a mapping whose source entity has a mismatched
+  `device_class` (for example a humidity sensor on a temperature field),
+  or which declares no unit, triggers a confirmation step listing the
+  concerns; a clean mapping still saves in one step. At runtime, each
+  converted reading is bounds-checked against a wide sane range per
+  field (`PLAUSIBLE_RANGE` in `const.py`), so a mis-unit — the classic
+  being Pascals where hectopascals are expected — is dropped and
+  surfaced rather than published. None of these block a mapping: many
+  legitimate DIY and template sensors lack a device_class or units.
+- `implausible_sensors` attribute on the source-data problem binary
+  sensor, naming any field whose value fell outside its plausible range.
+- `solarradiation` is now sent to Windy, which the v2 endpoint accepts.
+
+### Changed
+
+- Windy uploads migrated from the legacy `POST /pws/update/{key}`
+  endpoint to the current `GET /api/v2/observation/update` (Windy
+  Stations API v2). Windy's documentation states the legacy API is
+  unsupported as of January 2026. The new endpoint is Weather
+  Underground compatible: values travel as query parameters and the
+  station password as the `PASSWORD` query field. Pressure is sent via
+  `mbar` (hectopascals) rather than converted to Pascals. Windy's
+  documented failure codes (400, 401, 409, 429 with `retry_after`) are
+  handled with specific messages. This is a breaking change for Windy
+  users only if Windy had already disabled the legacy endpoint for
+  their station; the configuration is unchanged.
+
+### Fixed
+
+- OpenWeatherMap uploads used the wrong endpoint and units. The send
+  path is `POST /data/3.0/measurements`, not
+  `/data/3.0/stations/measurements` (which returns 404), and the
+  endpoint takes metric units — Celsius, hectopascals, m/s, mm, km —
+  not the Kelvin and Pascals that OpenWeatherMap's read endpoints
+  default to. Temperature and dew point were being sent in Kelvin and
+  pressure in Pascals; all three are now correct. Success is HTTP 204
+  (200 and 201 are the update- and create-station codes and are no
+  longer accepted as success).
+
+### Verified against live services
+
+Verified against https://openweathermap.org/api/stations
+(Weather Stations API 3.0):
+
+- The OpenWeatherMap send endpoint is `POST /data/3.0/measurements`,
+  not `/data/3.0/stations/measurements` (which 404s), and it takes
+  **metric** units -- Celsius, hectopascals, m/s, mm, km -- not the
+  Kelvin and Pascals that OpenWeatherMap's read endpoints default to.
+  The documented request example (`temperature: 18.7`, `pressure:
+  1021`) confirms this. The 0.1.0 uploader had the wrong path and sent
+  Kelvin and Pascals; both are fixed in this release. Success
+  is HTTP 204 (200/201 are the update/create-station codes and are not
+  accepted); the `Content-Type: application/json` header the spec
+  requires for POST is sent; `appid` carries the key. Every field sent
+  (`station_id`, `dt`, `temperature`, `dew_point`, `humidity`,
+  `pressure`, `wind_speed`, `wind_gust`, `wind_deg`, `rain_1h`,
+  `rain_24h`, `visibility_distance`) is in the documented parameter
+  table.
+
+Also verified against https://stations.windy.com/api-reference (Windy
+Stations API v2):
+
+- The uploader was migrated off the legacy
+  `POST /pws/update/{key}` endpoint, which Windy's documentation now
+  states is unsupported (the new API is effective January 2026). It
+  targets `GET /api/v2/observation/update`, a Weather Underground
+  compatible endpoint that takes query parameters and the station
+  password as the `PASSWORD` query field.
+- Pressure is now sent via `mbar` (hectopascals) rather than converted
+  to Pascals, and `solarradiation` is now included. Every parameter
+  sent is in the documented v2 list.
+- Windy's `MIN_SERVICE_INTERVAL` of 300 s is confirmed by the
+  documentation ("at most once every 5 minutes"), not a guess.
+- The documented failure codes (400 bad password/payload, 401 missing
+  password, 409 duplicate, 429 rate limited with `retry_after`) are
+  handled with specific messages.
+
 ## [0.1.0] - 2026-07-18
 
 First release. Pre-1.0: the configuration schema and entity IDs may
@@ -202,5 +287,6 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lancer73/ha-weather-uploader/releases/tag/v0.1.0

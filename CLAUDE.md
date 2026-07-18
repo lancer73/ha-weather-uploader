@@ -41,7 +41,7 @@ custom_components/weather_uploader/
     ├── wetternetzwerk.py Wetternetzwerk.pro - WU protocol clone
     ├── meteo_services.py Meteo-Services - metric, NO AUTHENTICATION
     ├── pwsweather.py
-    ├── windy.py          JSON POST, metric
+    ├── windy.py          Windy v2, GET query, metric, WU-compatible
     └── openweathermap.py JSON POST, SI
 ```
 
@@ -86,6 +86,18 @@ interval, not its rate of change. It is a heuristic, not a contract.
 older than 2024.4. `hacs.json` requires 2024.6.0, so it should never
 fire; leave it.
 
+**Sensor mapping validation is advisory, never blocking.** Three
+layers: device_class mismatch and missing-unit warnings at config time
+(a confirm step shown only when there is something to flag), and a
+runtime plausibility bounds-check (`PLAUSIBLE_RANGE`, `_is_plausible`)
+that drops out-of-range values and lists them in `implausible_sensors`.
+The DIY/template audience routinely runs sensors with no device_class
+or units, so none of this may hard-block a mapping. If asked to enforce
+device_class strictly, push back: it would hide valid sensors. Ranges
+are wide on purpose — they catch mis-mappings and unit errors (Pascals
+vs hPa), not real weather extremes. Do not tighten them to "realistic"
+values.
+
 **Two entities, two questions.** `UploadStatusEntity` answers "is the
 network accepting our data". `SourceDataEntity` answers "is our data
 real". They are independent: a dead station produces green uploads. Do
@@ -109,8 +121,8 @@ these; nothing converts *to* them except the coordinator.
 **Adding a network** means adding one file under `uploaders/`,
 subclassing `BaseUploader`, implementing `build_params()`, and wiring it
 into `build_uploader()` and `SERVICES`. Override `send()` only if the
-transport differs from GET-with-query-params (Windy and OWM do; they
-POST JSON).
+transport differs from GET-with-query-params. OWM and Meteo-Services
+POST JSON/form; CWOP is APRS over TCP. Windy is GET-with-query.
 
 ## Invariants — do not break these
 
@@ -118,9 +130,12 @@ POST JSON).
    add them, but the dict the coordinator passes around and exposes via
    the `last_payload` attribute must contain sensor values only. Entity
    attributes are visible in the states API, templates, and diagnostics.
-2. **Never log request parameters.** Every provider except Windy carries
-   the credential in the query string. Log response bodies only, and
-   truncate to 200 chars (`_BODY_LOG_LIMIT` in `base.py`).
+2. **Never log request parameters.** Several providers carry the
+   credential in the query string (Windy's v2 API requires the
+   `PASSWORD` query param; the WU-derived ones use a query key). Log
+   response bodies only, and truncate to 200 chars (`_BODY_LOG_LIMIT`
+   in `base.py`). Windy's error text is built from status codes, never
+   the echoed request.
 3. **No validation on the credential field.** WOW-BE documents the
    field as "PIN code or Password" and the Met Office no longer
    restricts it to 6 digits. Any length or charset check rejects valid
@@ -151,9 +166,9 @@ POST JSON).
 - **WOW-BE `visibility` is km,** not miles. Do not add a `km_to_mi` call
   to `wowbe.py`. `wunderground.py` does convert to miles — that is
   correct for the actual WU service.
-- **Pressure:** WU, PWS, OWM want sea-level-adjusted
-  (`pressure_relative`). Windy wants station pressure
-  (`pressure_absolute`) and adjusts itself. WOW-BE takes both, split
+- **Pressure:** WU, PWS want sea-level-adjusted (`pressure_relative`).
+  OWM takes `pressure` in hPa (we map relative). Windy wants station
+  pressure (`pressure_absolute`), sent via `mbar` in hPa. WOW-BE takes both, split
   into `baromin` (relative, authoritative) and `absbaromin` (absolute).
   Getting this wrong yields plausible, wrong data. Do not "simplify"
   these to one field.
@@ -164,7 +179,12 @@ POST JSON).
   is verified against the WOW-BE server: it accepts that format.
 - **OWM** needs a station created via its API first. This integration
   does not do that.
-- **Windy** takes the key in the URL path, not a param.
+- **Windy uses the v2 API** (`GET /api/v2/observation/update`), not the
+  legacy `POST /pws/update/{key}`, which Windy deprecated as of
+  2026-01. The password is the `PASSWORD` query param. It is WU
+  compatible: send metric names (`temp`, `dewpoint`, `mbar`, `wind`),
+  not the imperial aliases. Pressure goes via `mbar` (hPa) to avoid a
+  Pa conversion. Do not restore the legacy endpoint.
 - **WOW-BE rate limits:** 20/min/site, 600/min/IP, HTTP 429 on excess.
   Do not add retry-on-429 without backoff.
 
@@ -330,7 +350,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.1.0** (first release). Semantic Versioning 2.0.0.
+Current release: **0.2.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 

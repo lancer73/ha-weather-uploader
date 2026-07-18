@@ -13,8 +13,8 @@ Supported networks:
 | Weather Underground | `weatherstation.wunderground.com/weatherstation/updateweatherstation.php` | GET query | Station key | Imperial |
 | **CWOP / NOAA** | `cwop.aprs.net:14580` | **TCP (APRS-IS)** | None — fixed passcode `-1` | Imperial |
 | PWSWeather | `pwsupdate.pwsweather.com/api/v1/submitwx` | GET query | Station password | Imperial |
-| Windy | `stations.windy.com/pws/update/{key}` | POST JSON | API key | Metric |
-| OpenWeatherMap | `api.openweathermap.org/data/3.0/stations/measurements` | POST JSON | API key | SI (K, Pa) |
+| Windy | `stations.windy.com/api/v2/observation/update` | GET query | Station password | Metric |
+| OpenWeatherMap | `api.openweathermap.org/data/3.0/measurements` | POST JSON | API key | Metric (°C, hPa) |
 | Wetternetzwerk.pro (Germany) | `api.wetternetzwerk.pro/weatherstation/updateweatherstation.php` | GET query | Station key | Imperial |
 | Meteo-Services (Germany) | `channel1.meteo-services.com/stations/index.php` | POST form | **None** — station ID only | Metric |
 
@@ -172,7 +172,7 @@ every minute while Windy still only receives an update every 5 minutes.
 | Weather Underground | 60 s | accepts rapid-fire; 60 s is conservative |
 | CWOP | 300 s | **NOAA rule**: max one packet per 5 min |
 | PWSWeather | 300 s | conservative default, unverified |
-| Windy | 300 s | ~5 min documented minimum |
+| Windy | 300 s | **documented**: once per 5 min |
 | OpenWeatherMap | 60 s | conservative default, unverified |
 | Wetternetzwerk.pro | 600 s | another operator's choice, unverified |
 | Meteo-Services | 300 s | another operator's choice, unverified |
@@ -271,11 +271,12 @@ before each uploader converts again.
 | `wind_gust_direction` | ° | ✅ | ✅ | — | — | — | — | ✅ | — |
 | `rain_rate` | mm/h | ✅ | — | — | — | — | — | — | ✅ |
 | `rain_hourly` | mm | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `rain_24h` | mm | — | — | ✅ | — | — | ✅ | — | — |
 | `rain_daily` | mm | ✅ | ✅ | ▲ | ✅ | — | — | ✅ | ✅ |
 | `rain_weekly` | mm | — | ✅ | — | — | — | — | — | — |
 | `rain_monthly` | mm | — | ✅ | — | ✅ | — | — | — | — |
 | `rain_yearly` | mm | — | ✅ | — | ✅ | — | — | — | — |
-| `solar_radiation` | W/m² | ✅ | ✅ | ✅ | ✅ | — | — | ✅ | ✅ |
+| `solar_radiation` | W/m² | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ |
 | `uv_index` | index | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ |
 | `illuminance` | lux | — | — | — | — | — | — | — | — |
 | `indoor_temperature` | °C | — | ✅ | — | — | — | — | ✅ | — |
@@ -316,7 +317,7 @@ This matters and gets silently mis-mapped often:
 
 - **`pressure_relative`** is sea-level-adjusted (QNH). WOW-BE
   (`baromin`), Weather Underground, PWSWeather, and OpenWeatherMap want
-  this.
+  this (OpenWeatherMap in hPa, the others converted to inHg).
 - **`pressure_absolute`** is raw station pressure (QFE). Windy wants
   this, and WOW-BE accepts it separately as `absbaromin`.
 
@@ -386,6 +387,9 @@ is fiction.
 - **`stale_sensors`:** fields dropped for being too old.
 - **`missing_sensors`:** fields whose entity is gone, unavailable, or
   non-numeric.
+- **`implausible_sensors`:** fields whose value fell outside the sane
+  range for that measurement — usually a wrong sensor or a unit
+  mismatch.
 - **`sensors_published`** / **`max_sensor_age`**: current counts and the
   active threshold.
 
@@ -466,6 +470,35 @@ that dies at 03:00 republishes its final reading as a current
 observation forever. For CWOP that means feeding fiction to NOAA's MADIS
 and, through it, National Weather Service forecasters.
 
+### Guarding against faulty sensor mappings
+
+Nothing stops you from mapping the wrong entity to a field — pointing
+the temperature field at a humidity sensor, say. Three non-blocking
+controls try to catch that, none of which prevents a determined
+mapping (many valid DIY sensors lack a device_class or units):
+
+- **Type check at configuration.** When you save a mapping whose source
+  entity has a `device_class` that does not match the field (a
+  `humidity` sensor on a temperature field), the flow shows a
+  confirmation step listing the mismatches. You can proceed anyway. A
+  correct mapping saves in one step with no extra prompt.
+- **Missing-unit warning at configuration.** If a mapped entity
+  declares no `unit_of_measurement`, the same step warns that its value
+  will be assumed to already be in the field's expected unit, since
+  there is nothing for the runtime converter to check against.
+- **Plausibility check at runtime.** Each converted reading is bounds-
+  checked against a wide sane range for that field (humidity 0–100,
+  relative pressure ~870–1085 hPa, and so on). A value outside it — the
+  classic symptom being a pressure of `101325` because the source was
+  Pascals rather than hectopascals — is dropped for that cycle and
+  named in the `implausible_sensors` attribute of the source-data
+  problem sensor. It is never published.
+
+The ranges are deliberately generous: they exist to catch a wrong
+mapping or a wrong unit, not to second-guess real weather. Cumulative
+rain totals (weekly, monthly, yearly) have no upper bound and are not
+range-checked.
+
 Example automation:
 
 ```yaml
@@ -524,6 +557,12 @@ Windy puts the key in the URL path — same exposure.
 **WOW-BE is the exception**, and it is a meaningful one: this
 integration sends the credential in a JSON request body, so it stays out
 of URL-based logging on both ends.
+
+(Windy's v2 API is the opposite case: it is Weather Underground
+compatible and requires the station password in the query string. This
+integration keeps it out of its own logs and error attributes, but the
+password does travel in the request URL, as the API mandates. Use
+HTTPS, which this integration always does.)
 
 That is our design choice, not a property of the API. WOW-BE's endpoint
 is Laravel and merges query parameters into request input, so it accepts
@@ -596,7 +635,7 @@ logger:
 | Uploads green but the network shows old data | Values are being dropped as stale before sending. Check `sensors_published` and `stale_sensors`. |
 | Fields vanish from `last_payload` over time | Those entities stopped *reporting* and are now past `max_sensor_age`. A value that merely stops *changing* — rain at 0.0, solar at night — is not affected. |
 | `HTTP 403` from WOW-BE | Invalid site credentials. Check the key and that you used the ID from the WOW-BE registration email, not an old Met Office site ID. |
-| `HTTP 429` from Windy | The global interval is too fast for Windy (~5 min minimum). Raise it to 300. |
+| `HTTP 429` from Windy | Sent faster than once per 5 minutes. The per-network throttle should prevent this; if you see it, the station is also being fed by another client. The error carries a `retry_after` time. |
 | `HTTP 422` from WOW-BE | Field validation failed. The message names the field; check `last_error`. A bad `siteid` gives "must be a valid site short ID". |
 | `HTTP 429` from WOW-BE | Rate limited: 20/min/site, 600/min/IP. Increase the interval. |
 | `HTTP 401` / `HTTP 403` elsewhere | Wrong key or station ID. |
