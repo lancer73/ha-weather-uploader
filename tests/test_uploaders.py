@@ -1,0 +1,408 @@
+"""Tests for uploader parameter mapping.
+
+build_params is a pure function, so no HTTP mocking is needed here.
+These tests never touch the live WOW-BE endpoint: it is rate limited
+per IP and CI would trip it.
+"""
+
+import re
+from datetime import UTC, datetime
+
+import pytest
+
+from custom_components.weather_uploader.const import (
+    MIN_SERVICE_INTERVAL,
+    SERVICE_CWOP,
+    SERVICE_METEO_SERVICES,
+    SERVICE_WETTERNETZWERK,
+    SERVICE_WINDY,
+    SERVICE_WOW_BE,
+)
+from custom_components.weather_uploader.uploaders import build_uploader
+from custom_components.weather_uploader.uploaders.base import (
+    c_to_f,
+    hpa_to_inhg,
+    km_to_mi,
+    mm_to_in,
+    ms_to_mph,
+)
+from custom_components.weather_uploader.uploaders.cwop import (
+    CwopUploader,
+    build_packet,
+    format_latitude,
+    format_longitude,
+)
+from custom_components.weather_uploader.uploaders.meteo_services import (
+    MeteoServicesUploader,
+    dewpoint_celsius,
+)
+from custom_components.weather_uploader.uploaders.openweathermap import (
+    OpenWeatherMapUploader,
+)
+from custom_components.weather_uploader.uploaders.pwsweather import PWSWeatherUploader
+from custom_components.weather_uploader.uploaders.wetternetzwerk import (
+    WetternetzwerkUploader,
+)
+from custom_components.weather_uploader.uploaders.windy import WindyUploader
+from custom_components.weather_uploader.uploaders.wowbe import WowBeUploader
+from custom_components.weather_uploader.uploaders.wunderground import (
+    WundergroundUploader,
+)
+
+
+def test_unit_helpers():
+    """Conversion helpers match known reference values."""
+    assert c_to_f(0) == pytest.approx(32.0)
+    assert c_to_f(100) == pytest.approx(212.0)
+    assert ms_to_mph(1) == pytest.approx(2.236936)
+    assert mm_to_in(25.4) == pytest.approx(1.0)
+    assert hpa_to_inhg(1013.25) == pytest.approx(29.921, abs=1e-3)
+    assert km_to_mi(1.609344) == pytest.approx(1.0)
+
+
+def test_wunderground_mapping(sample_data):
+    """WU receives imperial values and its credentials."""
+    up = WundergroundUploader(None, "KSTATION1", "secret")
+    p = up.build_params(sample_data)
+    assert p["ID"] == "KSTATION1"
+    assert p["PASSWORD"] == "secret"
+    assert p["tempf"] == pytest.approx(68.0)
+    assert p["baromin"] == pytest.approx(29.921, abs=1e-2)
+    assert p["rainin"] == pytest.approx(0.1, abs=1e-3)
+    assert p["action"] == "updateraw"
+
+
+def test_wow_be_uses_weatherunderground_endpoint():
+    """WOW-BE uses the WU protocol endpoint: most fields, key auth."""
+    up = WowBeUploader(None, "s", "k")
+    assert up.url == "https://wow.meteo.be/api/v2/send/weatherunderground"
+    assert "automaticreading" not in up.url
+    assert "ecowitt" not in up.url
+
+
+def test_wow_be_required_fields_present(sample_data):
+    """The spec marks ID, PASSWORD and dateutc as required."""
+    up = WowBeUploader(None, "916094001", "key")
+    p = up._prune(up.build_params(sample_data))
+    for field in ("ID", "PASSWORD", "dateutc"):
+        assert field in p
+
+
+def test_wow_be_accepts_complex_password(sample_data):
+    """PASSWORD is free-form: "PIN code or Password", one field."""
+    up = WowBeUploader(None, "916094001", "C0mpl3x-P@ssw0rd!")
+    p = up.build_params(sample_data)
+    assert p["PASSWORD"] == "C0mpl3x-P@ssw0rd!"
+    assert p["ID"] == "916094001"
+
+
+def test_wow_be_dateutc_format_matches_server_rule(sample_data):
+    """The server requires Y-m-d H:i:s and rejects an ISO-8601 offset."""
+    up = WowBeUploader(None, "s", "k")
+    dateutc = up.build_params(sample_data)["dateutc"]
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", dateutc)
+    assert "T" not in dateutc
+    assert "+" not in dateutc and not dateutc.endswith("Z")
+    # and it must be UTC, not local
+    parsed = datetime.strptime(dateutc, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+    assert abs((parsed - datetime.now(UTC)).total_seconds()) < 60
+
+
+def test_wow_be_rainin_is_rate_not_accumulation(sample_data):
+    """WOW-BE rainin is an instantaneous rate in in/h."""
+    up = WowBeUploader(None, "s", "k")
+    p = up.build_params(sample_data)
+    # rain_rate 5.08 mm/h -> 0.2 in/h; rain_hourly (2.54mm) would give 0.1
+    assert p["rainin"] == pytest.approx(0.2, abs=1e-3)
+
+
+def test_wow_be_sends_only_one_pressure_field(sample_data):
+    """baromin is authoritative: sending both would discard absbaromin."""
+    up = WowBeUploader(None, "s", "k")
+    p = up._prune(up.build_params(sample_data))
+    assert "baromin" in p
+    assert "absbaromin" not in p
+    assert p["baromin"] == pytest.approx(hpa_to_inhg(1013.25), abs=1e-3)
+
+
+def test_wow_be_falls_back_to_absbaromin(sample_data):
+    """With only absolute pressure, let the server derive the relative."""
+    data = {k: v for k, v in sample_data.items() if k != "pressure_relative"}
+    up = WowBeUploader(None, "s", "k")
+    p = up._prune(up.build_params(data))
+    assert "absbaromin" in p
+    assert "baromin" not in p
+    assert p["absbaromin"] == pytest.approx(hpa_to_inhg(1000.0), abs=1e-3)
+
+
+def test_wow_be_sends_no_pressure_when_unmapped():
+    """Neither pressure field appears when neither is mapped."""
+    up = WowBeUploader(None, "s", "k")
+    p = up._prune(up.build_params({"temperature": 20.0}))
+    assert "baromin" not in p
+    assert "absbaromin" not in p
+
+
+def test_wow_be_visibility_stays_km(sample_data):
+    """WOW-BE takes kilometres, not miles."""
+    up = WowBeUploader(None, "s", "k")
+    assert up.build_params(sample_data)["visibility"] == pytest.approx(16.09, abs=1e-2)
+
+
+def test_wow_be_sends_uv(sample_data):
+    """UV is why the WU protocol is preferred over the WOW protocol."""
+    up = WowBeUploader(None, "s", "k")
+    assert up.build_params(sample_data)["UV"] == 4.0
+
+
+def test_windy_uses_absolute_pressure(sample_data):
+    """Windy must get station pressure in Pa, not sea-level."""
+    up = WindyUploader(None, "station-1", "apikey")
+    p = up.build_params(sample_data)
+    assert p["pressure"] == pytest.approx(100000.0)
+    assert p["temp"] == pytest.approx(20.0)
+
+
+def test_owm_uses_relative_pressure_and_kelvin(sample_data):
+    """OWM wants SI units and sea-level pressure."""
+    up = OpenWeatherMapUploader(None, "st-1", "apikey")
+    p = up.build_params(sample_data)
+    assert p["temperature"] == pytest.approx(293.15)
+    assert p["pressure"] == pytest.approx(101325.0)
+
+
+def test_pwsweather_mapping(sample_data):
+    """PWSWeather receives imperial values."""
+    up = PWSWeatherUploader(None, "ST1", "pw")
+    p = up.build_params(sample_data)
+    assert p["tempf"] == pytest.approx(68.0)
+    assert p["solarradiation"] == 450.0
+
+
+@pytest.mark.parametrize(
+    "uploader",
+    [
+        WundergroundUploader(None, "a", "b"),
+        WowBeUploader(None, "a", "b"),
+        PWSWeatherUploader(None, "a", "b"),
+        WindyUploader(None, "a", "b"),
+        OpenWeatherMapUploader(None, "a", "b"),
+    ],
+)
+def test_empty_data_prunes_to_credentials_only(uploader):
+    """With no sensor data, no measurement params are emitted."""
+    pruned = uploader._prune(uploader.build_params({}))
+    for field in ("tempf", "temp", "temperature", "humidity", "rh"):
+        assert field not in pruned or pruned.get(field) is not None
+
+
+def test_uploader_without_min_interval_is_always_due():
+    """A zero interval means no throttling."""
+    up = WowBeUploader(None, "s", "k")
+    assert up.min_interval == 0
+    assert up.is_due()
+    up.mark_sent()
+    assert up.is_due()
+
+
+def test_uploader_throttles_until_interval_elapses():
+    """A network is skipped until its own minimum has passed."""
+    up = WowBeUploader(None, "s", "k", min_interval=300)
+    assert up.is_due()
+    up.last_sent = 1000.0
+    assert not up.is_due(now=1000.0)
+    assert not up.is_due(now=1299.0)
+    assert up.is_due(now=1300.0)
+    assert up.is_due(now=5000.0)
+
+
+def test_throttle_counts_attempts_not_successes():
+    """A failed attempt still consumed the provider's rate budget."""
+    up = WowBeUploader(None, "s", "k", min_interval=300)
+    up.mark_sent()  # as the coordinator does, regardless of outcome
+    assert up.last_sent is not None
+    assert not up.is_due(now=up.last_sent + 1)
+
+
+def test_factory_applies_per_service_intervals():
+    """Windy is throttled harder than WOW-BE by default."""
+    cfg = {"station_id": "x", "key": "k"}
+    wow = build_uploader(None, SERVICE_WOW_BE, cfg)
+    windy = build_uploader(None, SERVICE_WINDY, cfg)
+    assert wow.min_interval == MIN_SERVICE_INTERVAL[SERVICE_WOW_BE]
+    assert windy.min_interval == MIN_SERVICE_INTERVAL[SERVICE_WINDY]
+    assert windy.min_interval > wow.min_interval
+
+
+def test_prune_drops_none():
+    """_prune removes unset fields entirely rather than sending blanks."""
+    up = WundergroundUploader(None, "a", "b")
+    assert up._prune({"x": 1, "y": None}) == {"x": 1}
+
+
+# --- CWOP (native APRS) -------------------------------------------------
+
+# The worked example from NOAA's own FAQ at http://wxqa.com/faq.html
+NOAA_EXAMPLE = "@060151z3316.04N/09631.96W_120/005g010t021r000p000P000h75b10322"
+NOAA_LAT = 33 + 16.04 / 60
+NOAA_LON = -(96 + 31.96 / 60)
+
+
+def test_aprs_coordinates_match_noaa_format():
+    """APRS uses ddmm.hh with mandatory leading zeros, not decimals."""
+    assert format_latitude(NOAA_LAT) == "3316.04N"
+    assert format_longitude(NOAA_LON) == "09631.96W"
+    assert format_latitude(-33.5) == "3330.00S"
+    assert format_longitude(4.5) == "00430.00E"
+
+
+def test_cwop_packet_reproduces_noaa_example():
+    """Byte-for-byte against the packet NOAA documents."""
+    data = {
+        "wind_direction": 120.0,
+        "wind_speed": 5 / 2.236936,
+        "wind_gust": 10 / 2.236936,
+        "temperature": (21 - 32) * 5 / 9,
+        "rain_hourly": 0.0,
+        "rain_24h": 0.0,
+        "rain_daily": 0.0,
+        "humidity": 75.0,
+        "pressure_relative": 1032.2,
+    }
+    packet = build_packet(
+        "EW9876", NOAA_LAT, NOAA_LON, data, datetime(2026, 7, 6, 1, 51, tzinfo=UTC)
+    )
+    assert packet == f"EW9876>APRS,TCPIP*:{NOAA_EXAMPLE}"
+
+
+def test_cwop_missing_required_fields_become_dots():
+    """The first four fields are positional and must always be present."""
+    packet = build_packet(
+        "EW1", NOAA_LAT, NOAA_LON, {}, datetime(2026, 7, 6, 1, 51, tzinfo=UTC)
+    )
+    assert packet.endswith("_.../...g...t...")
+
+
+@pytest.mark.parametrize(
+    ("celsius", "expected"),
+    [(-40.0, "t-40"), (-20.0, "t-04"), (-12.0, "t010"), (45.0, "t113")],
+)
+def test_cwop_temperature_encoding(celsius, expected):
+    """Fahrenheit in three characters, negatives included."""
+    packet = build_packet(
+        "EW1", 0.0, 0.0, {"temperature": celsius}, datetime(2026, 1, 1, tzinfo=UTC)
+    )
+    assert expected in packet
+
+
+def test_cwop_humidity_100_encodes_as_h00():
+    """The field is two digits, so 100% is represented as h00."""
+    packet = build_packet(
+        "EW1", 0.0, 0.0, {"humidity": 100.0}, datetime(2026, 1, 1, tzinfo=UTC)
+    )
+    assert "h00" in packet
+
+
+def test_cwop_pressure_is_tenths_of_millibar():
+    """1013.2 hPa becomes b10132."""
+    packet = build_packet(
+        "EW1", 0.0, 0.0, {"pressure_relative": 1013.2}, datetime(2026, 1, 1, tzinfo=UTC)
+    )
+    assert "b10132" in packet
+
+
+def test_cwop_uses_native_aprs_not_a_bridge():
+    """No third-party HTTP relay: connect to CWOP directly."""
+    up = CwopUploader(None, "EW9876", latitude=51.0, longitude=4.0)
+    assert up.host == "cwop.aprs.net"
+    assert up.port == 14580
+    assert "cwop.rest" not in up.url
+    assert not up.url.startswith("http")
+
+
+def test_cwop_sends_no_credential(sample_data):
+    """CWOP non-ham stations use the fixed passcode -1; keys are ignored."""
+    up = CwopUploader(None, "EW9876", "ignored-secret", latitude=51.0, longitude=4.0)
+    packet = up.build_params(sample_data)["packet"]
+    assert "ignored-secret" not in packet
+
+
+def test_cwop_interval_matches_noaa_rule():
+    """NOAA asks for no more than one packet every five minutes."""
+    assert MIN_SERVICE_INTERVAL[SERVICE_CWOP] == 300
+
+
+# --- Meteo-Services -----------------------------------------------------
+
+
+def test_meteo_services_datum_format(sample_data):
+    """datum is YYYYMMDDHHmm in UTC, with utcstamp alongside."""
+    up = MeteoServicesUploader(None, "WS1", latitude=51.0, longitude=4.0, altitude=10.0)
+    params = up.build_params(sample_data)
+    assert re.fullmatch(r"\d{12}", params["datum"])
+    assert isinstance(params["utcstamp"], int)
+
+
+def test_meteo_services_is_metric(sample_data):
+    """No imperial conversion: this API takes C, hPa, m/s, mm."""
+    up = MeteoServicesUploader(None, "WS1", latitude=51.0, longitude=4.0)
+    params = up.build_params(sample_data)
+    assert params["t2m"] == pytest.approx(20.0)
+    assert params["press"] == pytest.approx(1013.25)
+    assert params["windspeed"] == pytest.approx(5.0)
+    assert params["rainh"] == pytest.approx(2.54)
+
+
+def test_meteo_services_sends_no_credential(sample_data):
+    """This network has no credential; any key passed is ignored."""
+    up = MeteoServicesUploader(None, "WS1", "ignored", latitude=51.0, longitude=4.0)
+    assert "ignored" not in str(up.build_params(sample_data))
+
+
+def test_meteo_services_omits_underivable_fields(sample_data):
+    """Better an absent field than a plausible-looking wrong one."""
+    up = MeteoServicesUploader(None, "WS1", latitude=51.0, longitude=4.0)
+    params = up.build_params(sample_data)
+    assert "et" not in params
+    assert "humidex" not in params
+
+
+def test_dewpoint_matches_mapped_value(sample_data):
+    """The Magnus formula should agree with a real dewpoint sensor."""
+    derived = dewpoint_celsius(sample_data["temperature"], sample_data["humidity"])
+    assert derived == pytest.approx(sample_data["dewpoint"], abs=0.2)
+
+
+def test_meteo_services_flagged_unauthenticated():
+    """The config flow relies on this set to warn the user."""
+    from custom_components.weather_uploader.const import UNAUTHENTICATED_SERVICES
+
+    assert SERVICE_METEO_SERVICES in UNAUTHENTICATED_SERVICES
+
+
+# --- Wetternetzwerk -----------------------------------------------------
+
+
+def test_wetternetzwerk_speaks_wu_protocol(sample_data):
+    """A WU clone: same parameter names, imperial units."""
+    up = WetternetzwerkUploader(None, "STATION", "key")
+    params = up.build_params(sample_data)
+    assert params["ID"] == "STATION"
+    assert params["PASSWORD"] == "key"
+    assert params["action"] == "updateraw"
+    assert params["tempf"] == pytest.approx(68.0)
+
+
+def test_wetternetzwerk_uses_slowest_interval():
+    """The reference forwarder uses 600s for this network."""
+    assert MIN_SERVICE_INTERVAL[SERVICE_WETTERNETZWERK] == 600
+
+
+def test_geo_services_need_coordinates():
+    """CWOP and Meteo-Services cannot publish without lat/lon."""
+    from custom_components.weather_uploader.const import GEO_SERVICES
+
+    assert SERVICE_CWOP in GEO_SERVICES
+    assert SERVICE_METEO_SERVICES in GEO_SERVICES
+    assert SERVICE_WOW_BE not in GEO_SERVICES
+    assert SERVICE_WINDY not in GEO_SERVICES
