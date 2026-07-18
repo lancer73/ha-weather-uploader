@@ -1,1 +1,101 @@
-
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Weather Network Uploader",
+        "description": "Choose which weather networks to publish to and how often. Each network is rate-limited separately, so you can pick a fast polling interval without overloading slower services.",
+        "data": {
+          "services": "Networks",
+          "interval": "Sensor polling interval"
+        },
+        "data_description": {
+          "interval": "How often to read your sensors, in seconds. Each network is throttled separately to respect its own rate limit, so a fast value here will not overload slower services. 60 matches RMI's recommendation for WOW-BE."
+        }
+      },
+      "credentials": {
+        "title": "Credentials for {service}",
+        "description": "Enter the station identifier and authentication key issued by {service}. These are stored in cleartext in Home Assistant's .storage directory and are transmitted to the provider over TLS.",
+        "data": {
+          "station_id": "Station ID",
+          "key": "Authentication key",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "altitude": "Altitude"
+        },
+        "data_description": {
+          "station_id": "For WOW-BE this is the site ID from your registration email; the short form or the long UUID both work. For CWOP it is your callsign, e.g. EW9876. For Windy it is the station number.",
+          "key": "The authentication key issued or chosen at registration. Any value is accepted; no length or format is enforced.",
+          "latitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
+          "longitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
+          "altitude": "Station ground elevation in metres above sea level."
+        }
+      },
+      "sensors": {
+        "title": "Map your sensors",
+        "description": "Select the Home Assistant entity for each field you want to publish. Leave a field blank to omit it. Units are converted automatically from each entity's declared unit. Note: rain_rate must be an instantaneous rate sensor, not an hourly accumulation."
+      },
+      "credentials_open": {
+        "title": "Station details for {service}",
+        "description": "This network has NO authentication. Your station is identified by its station ID alone, with no key or password. Anyone who learns or guesses that ID can publish observations as your station, and there is nothing to rotate if that happens. Unlike some networks there is no authenticated alternative here, so this is the only way to participate. Only continue if that trade is acceptable to you.",
+        "data": {
+          "station_id": "Station ID",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "altitude": "Altitude"
+        },
+        "data_description": {
+          "station_id": "The station ID emailed to you at registration.",
+          "latitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
+          "longitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
+          "altitude": "Station ground elevation in metres above sea level."
+        }
+      }
+    },
+    "error": {
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This uploader is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Weather Network Uploader options",
+        "description": "Adjust the polling interval, sensor staleness limit, and sensor mapping. To change credentials, remove and re-add the integration.",
+        "data": {
+          "interval": "Sensor polling interval",
+          "max_sensor_age": "Maximum sensor age"
+        },
+        "data_description": {
+          "interval": "How often to read your sensors, in seconds. Each network is throttled separately to respect its own rate limit.",
+          "max_sensor_age": "Drop readings whose entity has not reported for this long. This tracks whether your station is still sending data, not whether the value is changing, so a rain sensor reading 0.0 through a dry week is unaffected. Set 0 to disable (not recommended: a station that dies would then have its last reading republished as current, forever)."
+        }
+      }
+    }
+  },
+  "selector": {
+    "services": {
+      "options": {
+        "wow_be": "WOW-BE - RMI/KMI (Belgium)",
+        "wunderground": "Weather Underground",
+        "cwop": "CWOP / NOAA (feeds MADIS + National Weather Service)",
+        "pwsweather": "PWSWeather",
+        "windy": "Windy",
+        "openweathermap": "OpenWeatherMap",
+        "wetternetzwerk": "Wetternetzwerk.pro (Germany)",
+        "meteo_services": "Meteo-Services (Germany, no authentication)"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "upload_status": {
+        "name": "Upload status"
+      },
+      "source_data": {
+        "name": "Source data problem"
+      }
+    }
+  }
+}
