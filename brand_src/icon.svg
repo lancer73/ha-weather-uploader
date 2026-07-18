@@ -1,1 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Weather Network Uploader - integration icon source.
 
+  Concept: a weather-station observation (the arrow) published upward
+  into a cloud (the receiving networks). Deliberately generic: no
+  provider mark and no Home Assistant branding, since custom
+  integrations must not use Home Assistant branded imagery.
+
+  Construction notes:
+  - The cloud is a union of three circles and a rounded base rect.
+    Easier to keep symmetrical than a hand-tuned arc path.
+  - The arrow is defined once (#arrowPath). The cloud is masked by the
+    same path drawn with a thick stroke, which carves an evenly
+    centred gap around the arrow. Using one shared path for both the
+    fill and the mask is what keeps the gap concentric.
+  - The artwork is roughly 1.1:1, not 1:1. The brands spec requires a
+    square icon, so render_brand.py pads the short axis symmetrically
+    rather than stretching. Squaring the artwork itself would mean
+    distorting the cloud's proportions; a few pixels of transparent
+    padding is the better trade.
+
+  Rasterised to brand/icon.png (256x256) and brand/icon@2x.png (512x512)
+  by tools/render_brand.py. Edit this file, not the PNGs.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="cloudGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6FCDF6"/>
+      <stop offset="1" stop-color="#1E96D3"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#FFC062"/>
+      <stop offset="1" stop-color="#FF8A2B"/>
+    </linearGradient>
+
+    <path id="arrowPath"
+          d="M 256 100 L 352 232 L 302 238 L 302 410 L 210 410 L 210 238 L 160 238 Z"/>
+
+    <g id="cloudShape">
+      <circle cx="190" cy="250" r="74"/>
+      <circle cx="298" cy="214" r="98"/>
+      <circle cx="392" cy="268" r="66"/>
+      <rect x="116" y="272" width="310" height="82" rx="41"/>
+    </g>
+
+    <!-- White = keep. The stroked arrow paints black, carving a gap of
+         uniform width around the arrow silhouette. -->
+    <mask id="cloudMask">
+      <rect x="0" y="0" width="512" height="512" fill="#fff"/>
+      <use href="#arrowPath" fill="#000" stroke="#000" stroke-width="34"
+           stroke-linejoin="round"/>
+    </mask>
+  </defs>
+
+  <g fill="url(#cloudGrad)" mask="url(#cloudMask)">
+    <use href="#cloudShape"/>
+  </g>
+
+  <use href="#arrowPath" fill="url(#arrowGrad)"/>
+</svg>
