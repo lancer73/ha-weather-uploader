@@ -24,9 +24,10 @@ The documented request example (``"temperature": 18.7``,
 ``"pressure": 1021``) is decisive: those are Celsius and hPa, not
 Kelvin and Pascals.
 
-This integration does not register stations. Create the station via
-the API first (``POST /data/3.0/stations``) and use the returned
-internal ID here.
+The station itself is created during configuration (see
+``owm_station.py``), which calls ``POST /data/3.0/stations`` and stores
+the internal ID it returns. This uploader only sends measurements to
+that station.
 """
 
 from __future__ import annotations
