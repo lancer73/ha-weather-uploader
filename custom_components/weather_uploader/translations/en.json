@@ -108,8 +108,20 @@
   "options": {
     "step": {
       "init": {
-        "title": "Weather Network Uploader options",
-        "description": "Adjust the polling interval, sensor staleness limit, and sensor mapping. To change credentials, remove and re-add the integration.",
+        "title": "Weather Network Uploader",
+        "menu_options": {
+          "settings": "Edit sensor mapping and intervals",
+          "add_network": "Add a weather network",
+          "remove_network": "Remove a weather network"
+        }
+      },
+      "confirm_mapping": {
+        "title": "Check sensor mapping",
+        "description": "Some mappings look unusual. You can still continue — these are warnings, not errors, and are often fine for custom or DIY sensors.\n\n{warnings}\n\nSelect Submit to save the mapping as-is, or go back to change it."
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Adjust the polling interval, sensor staleness limit, and sensor mapping. To change a network's credentials, remove and re-add it.",
         "data": {
           "interval": "Sensor polling interval",
           "max_sensor_age": "Maximum sensor age"
@@ -119,10 +131,24 @@
           "max_sensor_age": "Drop readings whose entity has not reported for this long. This tracks whether your station is still sending data, not whether the value is changing, so a rain sensor reading 0.0 through a dry week is unaffected. Set 0 to disable (not recommended: a station that dies would then have its last reading republished as current, forever)."
         }
       },
-      "confirm_mapping": {
-        "title": "Check sensor mapping",
-        "description": "Some mappings look unusual. You can still continue — these are warnings, not errors, and are often fine for custom or DIY sensors.\n\n{warnings}\n\nSelect Submit to save the mapping as-is, or go back to change it."
+      "add_network": {
+        "title": "Add a weather network",
+        "description": "Choose one or more networks to add. You'll enter credentials for each on the next screens.",
+        "data": {
+          "services": "Networks to add"
+        }
+      },
+      "remove_network": {
+        "title": "Remove a weather network",
+        "description": "Choose one or more networks to remove. Their stored credentials are deleted and uploads to them stop. Your sensor mapping is not affected.",
+        "data": {
+          "services": "Networks to remove"
+        }
       }
+    },
+    "abort": {
+      "all_networks_configured": "Every supported network is already configured.",
+      "no_networks_configured": "There are no networks to remove."
     }
   },
   "selector": {
