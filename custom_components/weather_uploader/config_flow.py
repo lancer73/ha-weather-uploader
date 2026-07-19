@@ -33,10 +33,8 @@ from .const import (
     GEO_SERVICES,
     MIN_INTERVAL,
     SENSOR_KEYS,
-    SERVICE_METEO_SERVICES,
     SERVICE_OPENWEATHERMAP,
     SERVICES,
-    UNAUTHENTICATED_SERVICES,
 )
 from .uploaders.owm_station import StationError, create_station
 
@@ -210,34 +208,20 @@ class _CredentialSteps:
             self._pending.pop(0)
             return await self.async_step_credentials()
 
-        schema: dict[Any, Any] = {vol.Required(CONF_STATION_ID): str}
+        schema: dict[Any, Any] = {
+            vol.Required(CONF_STATION_ID): str,
+            vol.Required(CONF_KEY): _password_selector(),
+        }
 
-        # No password field for networks that have no credential: showing
-        # one would imply a secret protects the station when none does.
-        if service not in UNAUTHENTICATED_SERVICES:
-            schema[vol.Required(CONF_KEY)] = _password_selector()
-
+        # CWOP needs the station coordinates on every packet. The config
+        # flow asks for them only when such a network is selected, since
+        # precise home coordinates are sensitive.
         if service in GEO_SERVICES:
             schema[vol.Required(CONF_LATITUDE)] = _coordinate_selector(-90, 90)
             schema[vol.Required(CONF_LONGITUDE)] = _coordinate_selector(-180, 180)
-            if service == SERVICE_METEO_SERVICES:
-                schema[vol.Required(CONF_ALTITUDE, default=0.0)] = (
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=-500,
-                            max=9000,
-                            step=0.1,
-                            unit_of_measurement="m",
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    )
-                )
 
-        step = (
-            "credentials_open" if service in UNAUTHENTICATED_SERVICES else "credentials"
-        )
         return self.async_show_form(
-            step_id=step,
+            step_id="credentials",
             data_schema=vol.Schema(schema),
             description_placeholders={"service": service},
         )
@@ -325,12 +309,24 @@ class _CredentialSteps:
                 self._pending.pop(0)
                 return await self.async_step_credentials()
 
+        # Pre-fill from Home Assistant's own configured location so the
+        # user does not retype what HA already knows. These are defaults,
+        # not fixed values: the user can still adjust them -- for example
+        # to round the coordinates, since HA's home location is exact.
+        config = self.hass.config
+        default_name = config.location_name or "Home Assistant"
         schema = {
             vol.Required("external_id", default="ha_weather_uploader"): str,
-            vol.Required("name", default="Home Assistant"): str,
-            vol.Required(CONF_LATITUDE): _coordinate_selector(-90, 90),
-            vol.Required(CONF_LONGITUDE): _coordinate_selector(-180, 180),
-            vol.Required(CONF_ALTITUDE, default=0.0): selector.NumberSelector(
+            vol.Required("name", default=default_name): str,
+            vol.Required(CONF_LATITUDE, default=config.latitude): _coordinate_selector(
+                -90, 90
+            ),
+            vol.Required(
+                CONF_LONGITUDE, default=config.longitude
+            ): _coordinate_selector(-180, 180),
+            vol.Required(
+                CONF_ALTITUDE, default=float(config.elevation or 0)
+            ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=-500,
                     max=9000,

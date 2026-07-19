@@ -156,8 +156,6 @@ SERVICE_PWSWEATHER: Final = "pwsweather"
 SERVICE_WINDY: Final = "windy"
 SERVICE_OPENWEATHERMAP: Final = "openweathermap"
 SERVICE_CWOP: Final = "cwop"
-SERVICE_WETTERNETZWERK: Final = "wetternetzwerk"
-SERVICE_METEO_SERVICES: Final = "meteo_services"
 
 SERVICES: Final[list[str]] = [
     SERVICE_WOW_BE,
@@ -166,20 +164,13 @@ SERVICES: Final[list[str]] = [
     SERVICE_PWSWEATHER,
     SERVICE_WINDY,
     SERVICE_OPENWEATHERMAP,
-    SERVICE_WETTERNETZWERK,
-    SERVICE_METEO_SERVICES,
 ]
 
 # Networks that need the station's coordinates on every observation.
 # The config flow only asks for them when one of these is selected:
 # precise home coordinates are sensitive and should not be collected
 # for networks that never receive them.
-GEO_SERVICES: Final[frozenset[str]] = frozenset({SERVICE_CWOP, SERVICE_METEO_SERVICES})
-
-# Networks whose only identifier is a station id, with no credential.
-# The config flow says so plainly rather than showing a password field
-# that implies a secret exists.
-UNAUTHENTICATED_SERVICES: Final[frozenset[str]] = frozenset({SERVICE_METEO_SERVICES})
+GEO_SERVICES: Final[frozenset[str]] = frozenset({SERVICE_CWOP})
 
 CONF_LATITUDE: Final = "latitude"
 CONF_LONGITUDE: Final = "longitude"
@@ -205,8 +196,6 @@ MIN_SERVICE_INTERVAL: Final[dict[str, int]] = {
     SERVICE_PWSWEATHER: 300,
     SERVICE_WINDY: 300,
     SERVICE_OPENWEATHERMAP: 60,
-    SERVICE_WETTERNETZWERK: 600,
-    SERVICE_METEO_SERVICES: 300,
 }
 
 # A mapped entity whose state has not changed for longer than this is
