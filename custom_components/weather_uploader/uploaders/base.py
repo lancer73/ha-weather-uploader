@@ -77,13 +77,24 @@ class BaseUploader(ABC):
         self._key = key
         self.min_interval = min_interval
         self.last_error: str | None = None
-        self.last_sent: float | None = None
+        # Seed the throttle as if a send just happened, so the first
+        # upload after start (or after a Home Assistant restart, which
+        # rebuilds every uploader) waits min_interval rather than firing
+        # immediately. Without this, a restart shortly after a send would
+        # upload again at once and trip a provider's rate limit -- Windy
+        # returns 429 inside its 5-minute window. min_interval <= 0
+        # (no throttle) is unaffected: is_due short-circuits to True.
+        self.last_sent: float | None = time.monotonic() if min_interval > 0 else None
 
     def is_due(self, now: float | None = None) -> bool:
         """Return True when enough time has passed to send again.
 
         Uses a monotonic clock so a system time change cannot stall an
-        uploader indefinitely.
+        uploader indefinitely. A throttled uploader starts with its
+        clock seeded to construction time (see ``__init__``), so the
+        first send waits ``min_interval`` after start rather than firing
+        immediately -- this is what keeps a restart from tripping a
+        provider's rate limit.
         """
         if self.min_interval <= 0 or self.last_sent is None:
             return True

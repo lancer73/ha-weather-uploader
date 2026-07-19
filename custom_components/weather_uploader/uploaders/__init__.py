@@ -7,28 +7,22 @@ import logging
 import aiohttp
 
 from ..const import (
-    CONF_ALTITUDE,
     CONF_KEY,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_STATION_ID,
     MIN_SERVICE_INTERVAL,
     SERVICE_CWOP,
-    SERVICE_METEO_SERVICES,
     SERVICE_OPENWEATHERMAP,
     SERVICE_PWSWEATHER,
-    SERVICE_WETTERNETZWERK,
     SERVICE_WINDY,
     SERVICE_WOW_BE,
     SERVICE_WUNDERGROUND,
-    UNAUTHENTICATED_SERVICES,
 )
 from .base import BaseUploader, UploaderError
 from .cwop import CwopUploader, build_packet
-from .meteo_services import MeteoServicesUploader
 from .openweathermap import OpenWeatherMapUploader
 from .pwsweather import PWSWeatherUploader
-from .wetternetzwerk import WetternetzwerkUploader
 from .windy import WindyUploader
 from .wowbe import WowBeUploader
 from .wunderground import WundergroundUploader
@@ -36,11 +30,9 @@ from .wunderground import WundergroundUploader
 __all__ = [
     "BaseUploader",
     "CwopUploader",
-    "MeteoServicesUploader",
     "OpenWeatherMapUploader",
     "PWSWeatherUploader",
     "UploaderError",
-    "WetternetzwerkUploader",
     "WindyUploader",
     "WowBeUploader",
     "WundergroundUploader",
@@ -62,9 +54,9 @@ def build_uploader(
     key = config.get(CONF_KEY)
     interval = MIN_SERVICE_INTERVAL.get(service, 0)
 
-    # CWOP authenticates with the fixed passcode -1, and Meteo-Services
-    # has no credential at all. Both identify by station id only.
-    if service in UNAUTHENTICATED_SERVICES or service == SERVICE_CWOP:
+    # CWOP authenticates with the fixed passcode -1: it identifies by
+    # station id only, with no key.
+    if service == SERVICE_CWOP:
         if not station_id:
             return None
     elif not key:
@@ -78,19 +70,6 @@ def build_uploader(
             latitude=float(config.get(CONF_LATITUDE, 0.0)),
             longitude=float(config.get(CONF_LONGITUDE, 0.0)),
         )
-
-    if service == SERVICE_METEO_SERVICES:
-        return MeteoServicesUploader(
-            session,
-            station_id,
-            min_interval=interval,
-            latitude=float(config.get(CONF_LATITUDE, 0.0)),
-            longitude=float(config.get(CONF_LONGITUDE, 0.0)),
-            altitude=float(config.get(CONF_ALTITUDE, 0.0)),
-        )
-
-    if service == SERVICE_WETTERNETZWERK:
-        return WetternetzwerkUploader(session, station_id, key, interval)
 
     if service == SERVICE_WUNDERGROUND:
         return WundergroundUploader(session, station_id, key, interval)

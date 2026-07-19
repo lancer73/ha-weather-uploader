@@ -1,8 +1,9 @@
 """CWOP (Citizen Weather Observer Program) uploader.
 
 CWOP feeds NOAA's MADIS, which supplies National Weather Service
-forecasters and researchers. It is the only supported network with
-direct scientific use.
+forecasters and researchers. Along with WOW-BE (the KMI/KNMI network),
+it is one of the supported networks whose data is put to operational
+and scientific use by a national meteorological service.
 
 CWOP is not an HTTP API. It is APRS-IS: a plain TCP connection to port
 14580, a login line, one packet, disconnect. This uploader speaks that
