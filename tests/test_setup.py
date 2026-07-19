@@ -58,3 +58,72 @@ def test_coordinator_construction_with_services(services):
 
     coordinator = UploadCoordinator(hass, entry, [], interval=60)
     assert coordinator.config_entry is entry
+
+
+# --- Config-flow selector validity --------------------------------------
+
+# The config form once crashed in the UI (with nothing in the Python log)
+# because a NumberSelector was built with step=0.0001, which Home
+# Assistant rejects. These tests build every selector the flow uses, so a
+# bad selector config fails here instead of in the live interface.
+
+
+def test_coordinate_selector_builds():
+    """Latitude/longitude selectors must construct without raising."""
+    from custom_components.weather_uploader.config_flow import _coordinate_selector
+
+    # Both the latitude and longitude ranges we use in the flow.
+    assert _coordinate_selector(-90, 90) is not None
+    assert _coordinate_selector(-180, 180) is not None
+
+
+def test_all_flow_number_selectors_build():
+    """Every NumberSelector config in the flow must be valid.
+
+    Home Assistant validates step against the range; an over-fine step
+    (0.0001) is rejected. Building each selector here catches that.
+    """
+    from homeassistant.helpers import selector
+
+    from custom_components.weather_uploader.config_flow import (
+        _coordinate_selector,
+        _max_age_selector,
+    )
+
+    # Coordinate selectors.
+    _coordinate_selector(-90, 90)
+    _coordinate_selector(-180, 180)
+    # Staleness selector.
+    _max_age_selector()
+    # Interval and altitude selectors are inline; reproduce their configs.
+    selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=30,
+            max=3600,
+            step=30,
+            unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+    selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=-500,
+            max=9000,
+            step=1,
+            unit_of_measurement="m",
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
+def test_owm_mode_selector_builds():
+    """The create/existing mode toggle must construct."""
+    from homeassistant.helpers import selector
+
+    assert selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=["create", "existing"],
+            translation_key="owm_mode",
+            mode=selector.SelectSelectorMode.LIST,
+        )
+    )
