@@ -100,3 +100,71 @@ async def test_find_returns_none_when_absent():
     """Lookup returns None when no station matches the external_id."""
     session = _Session(get=_Resp(200, [{"id": "z", "external_id": "nope"}]))
     assert await find_station_id(session, "key", "HA_Garden") is None
+
+
+# --- Config-flow pre-fill from HA location -------------------------------
+
+
+async def test_owm_create_prefills_from_ha_location():
+    """The station form defaults to Home Assistant's own location.
+
+    HA already knows the home coordinates, elevation, and location name;
+    the user should not have to retype them. They remain editable so a
+    rounded or different location can be published.
+    """
+    from unittest.mock import MagicMock
+
+    from custom_components.weather_uploader.config_flow import (
+        WeatherUploaderConfigFlow,
+    )
+    from custom_components.weather_uploader.const import SERVICE_OPENWEATHERMAP
+
+    flow = WeatherUploaderConfigFlow()
+    flow.hass = MagicMock()
+    flow.hass.config.latitude = 52.0907
+    flow.hass.config.longitude = 5.1214
+    flow.hass.config.elevation = 12
+    flow.hass.config.location_name = "Utrecht Home"
+    flow._pending = [SERVICE_OPENWEATHERMAP]
+    flow._services = {}
+    flow._owm_key = "key"
+
+    result = await flow.async_step_owm_create()
+    defaults = {}
+    for marker in result["data_schema"].schema:
+        raw = getattr(marker, "default", None)
+        defaults[str(marker)] = raw() if callable(raw) else raw
+
+    assert defaults["latitude"] == 52.0907
+    assert defaults["longitude"] == 5.1214
+    assert defaults["altitude"] == 12.0
+    assert defaults["name"] == "Utrecht Home"
+
+
+async def test_owm_create_prefill_fallbacks():
+    """Empty location name and unset elevation fall back cleanly."""
+    from unittest.mock import MagicMock
+
+    from custom_components.weather_uploader.config_flow import (
+        WeatherUploaderConfigFlow,
+    )
+    from custom_components.weather_uploader.const import SERVICE_OPENWEATHERMAP
+
+    flow = WeatherUploaderConfigFlow()
+    flow.hass = MagicMock()
+    flow.hass.config.latitude = 0.0
+    flow.hass.config.longitude = 0.0
+    flow.hass.config.elevation = None
+    flow.hass.config.location_name = ""
+    flow._pending = [SERVICE_OPENWEATHERMAP]
+    flow._services = {}
+    flow._owm_key = "key"
+
+    result = await flow.async_step_owm_create()
+    defaults = {}
+    for marker in result["data_schema"].schema:
+        raw = getattr(marker, "default", None)
+        defaults[str(marker)] = raw() if callable(raw) else raw
+
+    assert defaults["name"] == "Home Assistant"
+    assert defaults["altitude"] == 0.0

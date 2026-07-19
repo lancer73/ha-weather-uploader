@@ -13,8 +13,6 @@ import pytest
 from custom_components.weather_uploader.const import (
     MIN_SERVICE_INTERVAL,
     SERVICE_CWOP,
-    SERVICE_METEO_SERVICES,
-    SERVICE_WETTERNETZWERK,
     SERVICE_WINDY,
     SERVICE_WOW_BE,
 )
@@ -32,17 +30,10 @@ from custom_components.weather_uploader.uploaders.cwop import (
     format_latitude,
     format_longitude,
 )
-from custom_components.weather_uploader.uploaders.meteo_services import (
-    MeteoServicesUploader,
-    dewpoint_celsius,
-)
 from custom_components.weather_uploader.uploaders.openweathermap import (
     OpenWeatherMapUploader,
 )
 from custom_components.weather_uploader.uploaders.pwsweather import PWSWeatherUploader
-from custom_components.weather_uploader.uploaders.wetternetzwerk import (
-    WetternetzwerkUploader,
-)
 from custom_components.weather_uploader.uploaders.windy import WindyUploader
 from custom_components.weather_uploader.uploaders.wowbe import WowBeUploader
 from custom_components.weather_uploader.uploaders.wunderground import (
@@ -294,12 +285,36 @@ def test_uploader_without_min_interval_is_always_due():
 def test_uploader_throttles_until_interval_elapses():
     """A network is skipped until its own minimum has passed."""
     up = WowBeUploader(None, "s", "k", min_interval=300)
-    assert up.is_due()
     up.last_sent = 1000.0
     assert not up.is_due(now=1000.0)
     assert not up.is_due(now=1299.0)
     assert up.is_due(now=1300.0)
     assert up.is_due(now=5000.0)
+
+
+def test_throttled_uploader_waits_after_construction():
+    """A restart rebuilds uploaders; the first send must still wait.
+
+    Home Assistant rebuilds every uploader on restart. If a throttled
+    uploader were due immediately, a restart shortly after a send would
+    upload again at once and trip the provider's rate limit (Windy
+    returns 429 within its 5-minute window). The throttle is therefore
+    seeded at construction, so the first send waits min_interval.
+    """
+    up = WowBeUploader(None, "s", "k", min_interval=300)
+    assert up.last_sent is not None
+    # Not due until an interval has passed from construction.
+    start = up.last_sent
+    assert not up.is_due(now=start)
+    assert not up.is_due(now=start + 299)
+    assert up.is_due(now=start + 300)
+
+
+def test_unthrottled_uploader_is_due_at_construction():
+    """A zero-interval uploader has no seed and sends immediately."""
+    up = WowBeUploader(None, "s", "k")  # min_interval defaults to 0
+    assert up.last_sent is None
+    assert up.is_due()
 
 
 def test_throttle_counts_attempts_not_successes():
@@ -418,77 +433,10 @@ def test_cwop_interval_matches_noaa_rule():
     assert MIN_SERVICE_INTERVAL[SERVICE_CWOP] == 300
 
 
-# --- Meteo-Services -----------------------------------------------------
-
-
-def test_meteo_services_datum_format(sample_data):
-    """datum is YYYYMMDDHHmm in UTC, with utcstamp alongside."""
-    up = MeteoServicesUploader(None, "WS1", latitude=51.0, longitude=4.0, altitude=10.0)
-    params = up.build_params(sample_data)
-    assert re.fullmatch(r"\d{12}", params["datum"])
-    assert isinstance(params["utcstamp"], int)
-
-
-def test_meteo_services_is_metric(sample_data):
-    """No imperial conversion: this API takes C, hPa, m/s, mm."""
-    up = MeteoServicesUploader(None, "WS1", latitude=51.0, longitude=4.0)
-    params = up.build_params(sample_data)
-    assert params["t2m"] == pytest.approx(20.0)
-    assert params["press"] == pytest.approx(1013.25)
-    assert params["windspeed"] == pytest.approx(5.0)
-    assert params["rainh"] == pytest.approx(2.54)
-
-
-def test_meteo_services_sends_no_credential(sample_data):
-    """This network has no credential; any key passed is ignored."""
-    up = MeteoServicesUploader(None, "WS1", "ignored", latitude=51.0, longitude=4.0)
-    assert "ignored" not in str(up.build_params(sample_data))
-
-
-def test_meteo_services_omits_underivable_fields(sample_data):
-    """Better an absent field than a plausible-looking wrong one."""
-    up = MeteoServicesUploader(None, "WS1", latitude=51.0, longitude=4.0)
-    params = up.build_params(sample_data)
-    assert "et" not in params
-    assert "humidex" not in params
-
-
-def test_dewpoint_matches_mapped_value(sample_data):
-    """The Magnus formula should agree with a real dewpoint sensor."""
-    derived = dewpoint_celsius(sample_data["temperature"], sample_data["humidity"])
-    assert derived == pytest.approx(sample_data["dewpoint"], abs=0.2)
-
-
-def test_meteo_services_flagged_unauthenticated():
-    """The config flow relies on this set to warn the user."""
-    from custom_components.weather_uploader.const import UNAUTHENTICATED_SERVICES
-
-    assert SERVICE_METEO_SERVICES in UNAUTHENTICATED_SERVICES
-
-
-# --- Wetternetzwerk -----------------------------------------------------
-
-
-def test_wetternetzwerk_speaks_wu_protocol(sample_data):
-    """A WU clone: same parameter names, imperial units."""
-    up = WetternetzwerkUploader(None, "STATION", "key")
-    params = up.build_params(sample_data)
-    assert params["ID"] == "STATION"
-    assert params["PASSWORD"] == "key"
-    assert params["action"] == "updateraw"
-    assert params["tempf"] == pytest.approx(68.0)
-
-
-def test_wetternetzwerk_uses_slowest_interval():
-    """The reference forwarder uses 600s for this network."""
-    assert MIN_SERVICE_INTERVAL[SERVICE_WETTERNETZWERK] == 600
-
-
 def test_geo_services_need_coordinates():
-    """CWOP and Meteo-Services cannot publish without lat/lon."""
+    """CWOP cannot publish without lat/lon; others do not need it."""
     from custom_components.weather_uploader.const import GEO_SERVICES
 
     assert SERVICE_CWOP in GEO_SERVICES
-    assert SERVICE_METEO_SERVICES in GEO_SERVICES
     assert SERVICE_WOW_BE not in GEO_SERVICES
     assert SERVICE_WINDY not in GEO_SERVICES
