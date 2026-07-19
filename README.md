@@ -15,8 +15,6 @@ Supported networks:
 | PWSWeather | `pwsupdate.pwsweather.com/api/v1/submitwx` | GET query | Station password | Imperial |
 | Windy | `stations.windy.com/api/v2/observation/update` | GET query | Station password | Metric |
 | OpenWeatherMap | `api.openweathermap.org/data/3.0/measurements` | POST JSON | API key | Metric (°C, hPa) |
-| Wetternetzwerk.pro (Germany) | `api.wetternetzwerk.pro/weatherstation/updateweatherstation.php` | GET query | Station key | Imperial |
-| Meteo-Services (Germany) | `channel1.meteo-services.com/stations/index.php` | POST form | **None** — station ID only | Metric |
 
 Where your data ends up varies by network, and none of these are
 purely hobbyist. A rough spectrum:
@@ -34,19 +32,15 @@ purely hobbyist. A rough spectrum:
   agriculture, logistics, insurance, and forestry use explicitly. So
   contributing to these is contributing to a commercial product, not
   only a public map.
-- **Community and regional networks.** **PWSWeather**,
-  **Wetternetzwerk.pro**, and **Meteo-Services** are primarily
-  enthusiast and regional-hobbyist platforms, though even these may be
-  consumed by third parties.
+- **Community and regional networks.** **PWSWeather** is primarily an
+  enthusiast platform, though even these may be consumed by third
+  parties.
 
 The practical takeaway: your observations may be used well beyond a
 personal dashboard — by forecasters, researchers, or commercial data
 buyers, depending on the network. If that matters to you, weigh it per
 network before enabling it, and note the coordinate-precision guidance
 below.
-
-**Meteo-Services has no authentication.** See
-[Networks without authentication](#networks-without-authentication).
 
 WOW-BE offers three protocols. This integration uses the **Weather
 Underground** one — see [Protocol choice](#wow-be-protocol-choice).
@@ -216,6 +210,13 @@ interval is the sensor *polling* cadence. Each network additionally
 throttles itself against its own minimum, so a 60 s poll sends to WOW-BE
 every minute while Windy still only receives an update every 5 minutes.
 
+The per-network throttle is also seeded at startup, so restarting Home
+Assistant does not trigger an immediate extra upload. After a restart
+each network waits its own minimum before the first send, rather than
+firing at once and risking a rate-limit rejection. The cost is that the
+first upload after a restart is delayed by up to that minimum, which is
+harmless; a 429 is not.
+
 | Network | Minimum send interval | Source |
 | --- | --- | --- |
 | WOW-BE | 60 s | RMI recommendation; 20/min/site limit |
@@ -224,8 +225,6 @@ every minute while Windy still only receives an update every 5 minutes.
 | PWSWeather | 300 s | conservative default, unverified |
 | Windy | 300 s | **documented**: once per 5 min |
 | OpenWeatherMap | 60 s | conservative default, unverified |
-| Wetternetzwerk.pro | 600 s | another operator's choice, unverified |
-| Meteo-Services | 300 s | another operator's choice, unverified |
 
 Set the poll interval to whatever your fastest network wants. Networks
 that are not due are skipped for that tick and keep their previous
@@ -273,23 +272,6 @@ accepts only two**: `rain_hourly` (past 60 min) and `rain_24h` (rolling
 MADIS. If you want your rain data used, map `rain_hourly` and
 `rain_24h`.
 
-## Networks without authentication
-
-**Meteo-Services** identifies your station by station ID alone. There is
-no key, password, or token. Anyone who learns or guesses that ID can
-publish observations as your station, and there is nothing to rotate
-afterwards.
-
-This integration declines to implement WOW-BE's Ecowitt protocol for
-exactly this reason — but that case had an authenticated alternative on
-the same network. Meteo-Services does not: it is participate on these
-terms or not at all. So it is offered, with the trade stated plainly in
-the config flow, and left to you.
-
-Note also that Meteo-Services returns HTTP 200 with an empty body
-regardless of outcome. A green status entity means "the request was
-accepted", not "the observation was stored".
-
 ## OpenWeatherMap stations
 
 OpenWeatherMap is the only supported network with no website signup for
@@ -300,12 +282,13 @@ station has been created.
 The configuration handles this for you. When you add OpenWeatherMap, the
 setup step asks for your API key and then offers a choice:
 
-- **Create a new station.** You give a short label, a display name, and
-  the station's coordinates and altitude. The integration calls
-  OpenWeatherMap, creates the station, and stores the internal ID it
-  returns. If a station with the same label already exists on your
-  account, it is reused rather than duplicated, so re-adding the
-  integration will not spawn copies.
+- **Create a new station.** The display name, coordinates, and altitude
+  are pre-filled from your Home Assistant location, so you normally just
+  confirm. Adjust them if you'd rather publish a rounded or different
+  location. The integration calls OpenWeatherMap, creates the station,
+  and stores the internal ID it returns. If a station with the same
+  label already exists on your account, it is reused rather than
+  duplicated, so re-adding the integration will not spawn copies.
 - **Use an existing station ID.** If you already created a station (via
   the API or a previous setup), enter its internal ID directly — the
   long hexadecimal string, not the label you chose.
@@ -315,14 +298,15 @@ immediately, rather than surfacing later as failed uploads.
 
 ## Station coordinates
 
-CWOP and Meteo-Services require your station's latitude and longitude on
-every observation; Meteo-Services also wants altitude. The config flow
-only asks when one of those networks is selected — there is no reason to
-collect coordinates for networks that never receive them.
+CWOP requires your station's latitude and longitude on every
+observation. The config flow only asks when CWOP is selected — there is
+no reason to collect coordinates for networks that never receive them.
+(OpenWeatherMap also uses coordinates, but only once, when creating the
+station, and it pre-fills them from your Home Assistant location.)
 
-**These are published.** Both networks plot contributing stations
-publicly. Six decimal places locates a doorway; three (~100 m) is ample
-for meteorology. Round before entering unless you specifically want your
+**These are published.** CWOP plots contributing stations publicly. Six
+decimal places locates a doorway; three (~100 m) is ample for
+meteorology. Round before entering unless you specifically want your
 exact position on a public map.
 
 ## Sensor reference
@@ -331,41 +315,40 @@ Every field is optional. The left column is the mapping key shown in the
 config flow. The "internal unit" is what the integration normalizes to
 before each uploader converts again.
 
-| Key | Internal unit | WOW-BE | WU | CWOP | PWS | Windy | OWM | WNW | M-S |
-| --- | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| `temperature` | °C | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `dewpoint` | °C | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `humidity` | % | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `pressure_absolute` | hPa | ✅ | — | — | — | ✅ | — | — | — |
-| `pressure_relative` | hPa | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
-| `wind_speed` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `wind_gust` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `wind_direction` | ° | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `wind_gust_direction` | ° | ✅ | ✅ | — | — | — | — | ✅ | — |
-| `rain_rate` | mm/h | ✅ | — | — | — | — | — | — | ✅ |
-| `rain_hourly` | mm | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `rain_24h` | mm | — | — | ✅ | — | — | ✅ | — | — |
-| `rain_daily` | mm | ✅ | ✅ | ▲ | ✅ | — | — | ✅ | ✅ |
-| `rain_weekly` | mm | — | ✅ | — | — | — | — | — | — |
-| `rain_monthly` | mm | — | ✅ | — | ✅ | — | — | — | — |
-| `rain_yearly` | mm | — | ✅ | — | ✅ | — | — | — | — |
-| `solar_radiation` | W/m² | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ |
-| `uv_index` | index | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ |
-| `illuminance` | lux | — | — | — | — | — | — | — | — |
-| `indoor_temperature` | °C | — | ✅ | — | — | — | — | ✅ | — |
-| `indoor_humidity` | % | — | ✅ | — | — | — | — | ✅ | — |
-| `soil_temperature` | °C | ✅ | ✅ | — | ✅ | — | — | ✅ | ✅ |
-| `soil_moisture` | % | ✅ | ✅ | — | ✅ | — | — | ✅ | ✅ |
-| `leaf_wetness` | % | — | ✅ | — | — | — | — | — | ✅ |
-| `pm25` | µg/m³ | — | ✅ | — | — | — | — | — | — |
-| `pm10` | µg/m³ | — | ✅ | — | — | — | — | — | — |
-| `co2` | ppm | — | — | — | — | — | — | — | — |
-| `lightning_count` | count | — | — | — | — | — | — | — | — |
-| `lightning_distance` | km | — | — | — | — | — | — | — | — |
-| `visibility` | km | ✅ | ✅ | — | — | — | ✅ | — | — |
-| `cloud_base` | m | — | — | — | — | — | — | — | ✅ |
+| Key | Internal unit | WOW-BE | WU | CWOP | PWS | Windy | OWM |
+| --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| `temperature` | °C | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `dewpoint` | °C | ✅ | ✅ | — | ✅ | ✅ | ✅ |
+| `humidity` | % | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pressure_absolute` | hPa | ✅ | — | — | — | ✅ | — |
+| `pressure_relative` | hPa | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| `wind_speed` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `wind_gust` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `wind_direction` | ° | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `wind_gust_direction` | ° | ✅ | ✅ | — | — | — | — |
+| `rain_rate` | mm/h | ✅ | — | — | — | — | — |
+| `rain_hourly` | mm | — | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `rain_24h` | mm | — | — | ✅ | — | — | ✅ |
+| `rain_daily` | mm | ✅ | ✅ | ▲ | ✅ | — | — |
+| `rain_weekly` | mm | — | ✅ | — | — | — | — |
+| `rain_monthly` | mm | — | ✅ | — | ✅ | — | — |
+| `rain_yearly` | mm | — | ✅ | — | ✅ | — | — |
+| `solar_radiation` | W/m² | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| `uv_index` | index | ✅ | ✅ | — | ✅ | ✅ | — |
+| `illuminance` | lux | — | — | — | — | — | — |
+| `indoor_temperature` | °C | — | ✅ | — | — | — | — |
+| `indoor_humidity` | % | — | ✅ | — | — | — | — |
+| `soil_temperature` | °C | ✅ | ✅ | — | ✅ | — | — |
+| `soil_moisture` | % | ✅ | ✅ | — | ✅ | — | — |
+| `leaf_wetness` | % | — | ✅ | — | — | — | — |
+| `pm25` | µg/m³ | — | ✅ | — | — | — | — |
+| `pm10` | µg/m³ | — | ✅ | — | — | — | — |
+| `co2` | ppm | — | — | — | — | — | — |
+| `lightning_count` | count | — | — | — | — | — | — |
+| `lightning_distance` | km | — | — | — | — | — | — |
+| `visibility` | km | ✅ | ✅ | — | — | — | ✅ |
+| `cloud_base` | m | — | — | — | — | — | — |
 
-Columns: WNW = Wetternetzwerk.pro, M-S = Meteo-Services.
 ▲ = transmitted but ignored by MADIS.
 
 Fields with no ✅ in any column are accepted, normalized, and exposed in
@@ -708,7 +691,7 @@ logger:
 | Uploads green but the network shows old data | Values are being dropped as stale before sending. Check `sensors_published` and `stale_sensors`. |
 | Fields vanish from `last_payload` over time | Those entities stopped *reporting* and are now past `max_sensor_age`. A value that merely stops *changing* — rain at 0.0, solar at night — is not affected. |
 | `HTTP 403` from WOW-BE | Invalid site credentials. Check the key and that you used the ID from the WOW-BE registration email, not an old Met Office site ID. |
-| `HTTP 429` from Windy | Sent faster than once per 5 minutes. The per-network throttle should prevent this; if you see it, the station is also being fed by another client. The error carries a `retry_after` time. |
+| `HTTP 429` from Windy | Sent faster than once per 5 minutes. The per-network throttle prevents this in normal operation, including across restarts; if you still see it, the station is also being fed by another client. The error carries a `retry_after` time. |
 | `HTTP 422` from WOW-BE | Field validation failed. The message names the field; check `last_error`. A bad `siteid` gives "must be a valid site short ID". |
 | `HTTP 429` from WOW-BE | Rate limited: 20/min/site, 600/min/IP. Increase the interval. |
 | `HTTP 401` / `HTTP 403` elsewhere | Wrong key or station ID. |

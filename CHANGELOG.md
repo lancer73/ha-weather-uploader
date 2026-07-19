@@ -6,7 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.5.0] - 2026-07-19
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Removed
+
+- The Meteo-Services (`meteo_services`) and Wetternetzwerk.pro
+  (`wetternetzwerk`) uploaders. Both were unverifiable: Meteo-Services
+  registration was not obtainable, and Wetternetzwerk.pro is
+  Germany-only, so neither could be tested against a live account.
+  Shipping an untestable uploader is worse than not shipping it. The
+  unauthenticated-credential config step (`credentials_open`) that only
+  Meteo-Services used was removed with it. An existing entry that had
+  one of these configured simply stops uploading to it after upgrade;
+  remove it from the entry to clear the stored config.
+
+### Added
+
+- The OpenWeatherMap station-creation form now pre-fills the location
+  name, coordinates, and altitude from Home Assistant's own configured
+  location, so you no longer have to retype what HA already knows. The
+  fields stay editable, so a rounded or different location can still be
+  published.
+
 ### Fixed
+
+- Restarting Home Assistant no longer triggers an immediate extra upload
+  that could trip a provider's rate limit. Uploaders are rebuilt on
+  restart, and their per-network throttle was starting empty, so the
+  first poll uploaded regardless of when the previous send happened --
+  Windy returned 429 when a restart fell inside its 5-minute window. The
+  throttle is now seeded at construction, so each network waits its own
+  minimum before the first send after start. The first upload after a
+  restart is delayed by up to that minimum in exchange.
 
 - Corrected the README's characterisation of how each network uses
   contributed data. An earlier claim that CWOP was the only network with
@@ -192,8 +227,9 @@ still change before 1.0.0.
 - CWOP support over **native APRS-IS** (`cwop.aprs.net:14580`) rather
   than an HTTP bridge. The packet builder is a pure function and is
   tested byte-for-byte against the worked example in NOAA's own FAQ.
-  CWOP is the only supported network with direct scientific use: it
-  feeds NOAA's MADIS and the National Weather Service.
+  CWOP feeds NOAA's MADIS and the National Weather Service; along with
+  WOW-BE (KMI/KNMI), it is one of the supported networks put to
+  operational and scientific use by a national weather service.
 - `rain_24h` sensor key, added because MADIS ingests only hourly and
   24-hour rainfall from CWOP packets.
 - Station latitude, longitude, and altitude configuration, collected
@@ -372,7 +408,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.1.0...v0.2.0

@@ -38,8 +38,6 @@ custom_components/weather_uploader/
     ├── wunderground.py
     ├── wowbe.py          WOW-BE via its WeatherUnderground endpoint
     ├── cwop.py           CWOP over NATIVE APRS/TCP - not HTTP
-    ├── wetternetzwerk.py Wetternetzwerk.pro - WU protocol clone
-    ├── meteo_services.py Meteo-Services - metric, NO AUTHENTICATION
     ├── pwsweather.py
     ├── windy.py          Windy v2, GET query, metric, WU-compatible
     └── openweathermap.py JSON POST, SI
@@ -109,7 +107,16 @@ uploader gates itself via `is_due()` / `mark_sent()` against
 for that tick and keep their previous status (`_carry_forward`). Two
 non-obvious choices, both deliberate:
 
-- **Throttle on attempt, not success.** A failed request still consumed
+- **Throttle is seeded at construction.** `last_sent` starts at
+`time.monotonic()` for a throttled uploader (not `None`), so the first
+send waits `min_interval`. This is what stops a Home Assistant restart
+-- which rebuilds every uploader -- from firing an immediate upload and
+tripping a provider's rate limit (Windy 429 within its 5-minute window).
+`min_interval <= 0` stays unseeded and always due. Do not reset it to
+`None` at construction "for a fresh start"; that reintroduces the
+restart 429.
+
+**Throttle on attempt, not success.** A failed request still consumed
   the provider's rate budget; retrying immediately makes a 429 worse.
 - **`time.monotonic()`, not wall clock.** An NTP step or DST change must
   not stall an uploader for hours.
@@ -121,8 +128,8 @@ these; nothing converts *to* them except the coordinator.
 **Adding a network** means adding one file under `uploaders/`,
 subclassing `BaseUploader`, implementing `build_params()`, and wiring it
 into `build_uploader()` and `SERVICES`. Override `send()` only if the
-transport differs from GET-with-query-params. OWM and Meteo-Services
-POST JSON/form; CWOP is APRS over TCP. Windy is GET-with-query.
+transport differs from GET-with-query-params. OWM POSTs JSON; CWOP is
+APRS over TCP. Windy is GET-with-query.
 
 ## Invariants — do not break these
 
@@ -257,25 +264,6 @@ Station management is create/list only. We deliberately do not implement
 PUT/DELETE: the integration should not silently mutate or remove a
 user's OWM stations.
 
-## Meteo-Services has no authentication
-
-Station ID only, no key. We implement it anyway -- unlike the Ecowitt
-protocol below -- because there is no authenticated alternative on that
-network: it is these terms or no participation. The Ecowitt case was
-different because WOW-BE offers a key-authenticated endpoint for the
-same network.
-
-The config flow uses a separate `credentials_open` step that states the
-trade and shows **no password field**. Do not add one.
-
-The server returns 200 with an empty body regardless of outcome, so
-`send()` can only report transport success. Do not claim otherwise in
-the UI.
-
-Its API accepts `et` and `humidex`; we do not send them. Deriving them
-well needs inputs we do not collect, and a plausible wrong number is
-worse than an absent one. Do not add them "for completeness".
-
 ## Why there is no Ecowitt uploader
 
 WOW-BE exposes `/send/ecowitt`. It is deliberately not implemented, and
@@ -391,7 +379,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.4.0**. Semantic Versioning 2.0.0.
+Current release: **0.5.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 
