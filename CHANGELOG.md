@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-18
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Added
+
+- Networks can be added or removed after initial setup, from the
+  integration's Configure dialog, without deleting and re-adding the
+  entry. Adding reuses the same credential steps as initial setup
+  (including OpenWeatherMap station creation) and writes the new network
+  into the config entry; removing deletes a network and its stored
+  credentials. Either change reloads the entry so uploads start or stop
+  accordingly. Sensor mappings are shared across networks and left
+  untouched. Credentials remain in entry data only -- they are never
+  duplicated into options -- so the credential steps are shared between
+  the config and options flows via a mixin rather than reimplemented.
+
+### Fixed
+
+- Config flow crashed in the interface (with nothing in the log) when
+  advancing past a step that asks for coordinates — the OpenWeatherMap
+  station step, and the CWOP and Meteo-Services credential steps. The
+  latitude/longitude selector used `step=0.0001`, which Home Assistant's
+  number selector rejects; it now uses `step="any"` for arbitrary
+  decimal precision.
+- Async tests were silently skipped rather than run. `pytest-asyncio`
+  needs `asyncio_default_fixture_loop_scope` set to claim them under the
+  Home Assistant test environment; it is now set in `pyproject.toml`.
+  The full suite runs and passes.
+
 ## [0.3.0] - 2026-07-18
 
 Pre-1.0: the configuration schema and entity IDs may still change before
@@ -326,7 +357,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lancer73/ha-weather-uploader/releases/tag/v0.1.0

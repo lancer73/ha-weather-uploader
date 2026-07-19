@@ -216,6 +216,27 @@ Packet gotchas, all deliberate:
 - NOAA's rate limit (1 packet / 5 min) is a published rule, unlike most
   of `MIN_SERVICE_INTERVAL`. Do not lower it.
 
+## Networks live in entry.data; add/remove edits it directly
+
+Each network's config (with credentials) lives in `entry.data[services]`,
+never in options. The options flow can add or remove networks, and does
+so by writing `entry.data` via `async_update_entry` (which reloads through
+the existing update listener), NOT by mirroring services into options.
+Duplicating credentials into the options blob would write secrets to
+`.storage` twice — the reason credential editing was originally kept out
+of the options flow.
+
+The credential-collection steps (station id, key, geo, OWM sub-flow) are
+shared between the config and options flows via the `_CredentialSteps`
+mixin. Both flows override `_credentials_done`: initial setup goes to
+sensor mapping, the options flow persists to entry data and reloads. If
+you add a new credential step, put it on the mixin so both flows get it.
+Do not reimplement credential collection in the options flow.
+
+Existing-network credential rotation is deliberately not offered — remove
+and re-add instead. Keep it that way unless there is a way to do it
+without a second copy of the secret.
+
 ## OpenWeatherMap needs a station created first
 
 OWM is the only network whose `station_id` cannot be obtained from a
@@ -370,7 +391,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.3.0**. Semantic Versioning 2.0.0.
+Current release: **0.4.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 

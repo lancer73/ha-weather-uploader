@@ -84,6 +84,26 @@ mapping**. It does not let you change credentials — see
 [Security considerations](#security-considerations) for why. To rotate a
 key, remove the integration and add it again.
 
+
+### Adding or removing networks later
+
+You do not have to remove and re-add the integration to change which
+networks you publish to. Open the integration's **Configure** dialog and
+choose:
+
+- **Edit sensor mapping and intervals** — the sensor-to-field mapping,
+  polling interval, and staleness limit.
+- **Add a weather network** — pick one or more networks you have not set
+  up yet and enter their credentials, using the same steps as initial
+  setup (including OpenWeatherMap station creation). The new uploads
+  start after the entry reloads.
+- **Remove a weather network** — pick networks to stop publishing to.
+  Their stored credentials are deleted and their uploads stop. Your
+  sensor mapping is untouched, since it is shared across networks.
+
+To change an existing network's credentials, remove it and add it again;
+credential editing in place is not offered, to avoid holding secrets in
+more than one part of the stored configuration.
 ## WOW-BE protocol choice
 
 WOW-BE exposes three send endpoints. They are not equivalent:
