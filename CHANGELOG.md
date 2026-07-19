@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+
+- Corrected the README's characterisation of how each network uses
+  contributed data. An earlier claim that CWOP was the only network with
+  scientific use was wrong (WOW-BE, the KMI/KNMI network, also feeds the
+  KNMI app and research per KNMI); the subsequent claim that the other
+  networks are "community and hobbyist" platforms was also wrong.
+  Weather Underground's PWS data is sold through The Weather Company
+  (IBM) enterprise packages, and Windy and OpenWeatherMap run paid
+  professional API tiers over their data (OpenWeatherMap markets
+  agriculture, logistics, insurance, and forestry use). The note now
+  describes a spectrum -- national weather services, commercial data
+  platforms, and community/regional networks -- rather than labelling
+  networks. Also corrected in the CWOP uploader docstring and the
+  earlier changelog note.
 
 ## [0.4.0] - 2026-07-18
 
