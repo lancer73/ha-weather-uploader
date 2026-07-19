@@ -18,9 +18,14 @@ Supported networks:
 | Wetternetzwerk.pro (Germany) | `api.wetternetzwerk.pro/weatherstation/updateweatherstation.php` | GET query | Station key | Imperial |
 | Meteo-Services (Germany) | `channel1.meteo-services.com/stations/index.php` | POST form | **None** — station ID only | Metric |
 
-**CWOP** is the only network here with direct scientific use: it feeds
+Two of these networks are run by national meteorological services and
+put contributed data to operational and scientific use. **CWOP** feeds
 NOAA's MADIS, which supplies National Weather Service forecasters and
-researchers. See [CWOP](#cwop--noaa).
+researchers (see [CWOP](#cwop--noaa)). **WOW-BE** is the KMI/KNMI
+network: KNMI states that Dutch WOW observations feed the maps in the
+KNMI app and contribute to research such as urban-heat studies and more
+detailed extreme-weather advice. The other networks are primarily
+community and hobbyist platforms.
 
 **Meteo-Services has no authentication.** See
 [Networks without authentication](#networks-without-authentication).
@@ -35,6 +40,13 @@ decommissioning planned for late 2026, and is
 [not permitting migration to a third party](https://weatherspares.co.uk/blogs/news/new-replacement-for-the-uk-metoffice-wow-system).
 RMI relaunched the platform as WOW-BE with a new backend, extended to
 cover the rest of Europe.
+
+WOW-BE is a national-meteorological-service network, not just a hobbyist
+platform. KNMI (which directs Dutch users to the KMI-run WOW-BE) states
+that Dutch WOW observations feed the maps in the KNMI app and contribute
+to research, including urban-heat studies and more detailed
+extreme-weather advice. Observations are unvalidated and the institute
+does not guarantee their quality, but they are put to operational use.
 
 This integration does not support `wow.metoffice.gov.uk`. The endpoint
 still responds as of this writing, but it is on a published path to
