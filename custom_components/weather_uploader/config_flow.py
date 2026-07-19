@@ -79,7 +79,7 @@ def _coordinate_selector(low: float, high: float) -> selector.NumberSelector:
         selector.NumberSelectorConfig(
             min=low,
             max=high,
-            step=0.0001,
+            step="any",
             mode=selector.NumberSelectorMode.BOX,
         )
     )
@@ -152,67 +152,50 @@ def _sensor_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     return vol.Schema(schema)
 
 
-class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle initial setup."""
+class _CredentialSteps:
+    """Shared credential-collection steps for both flows.
 
-    VERSION = 1
+    Both the initial config flow and the options flow need to collect a
+    network's credentials the same way -- station id, key, geo fields,
+    and the OpenWeatherMap station sub-flow. These steps live here so
+    the logic exists once. They drive off three attributes the host
+    flow provides:
 
-    def __init__(self) -> None:
-        """Initialise flow state."""
-        self._services: dict[str, dict[str, Any]] = {}
-        self._pending: list[str] = []
-        self._interval: int = DEFAULT_INTERVAL
-        self._mapping: dict[str, Any] = {}
-        self._mapping_warnings: list[str] = []
-        self._owm_key: str = ""
+    - ``_pending``: service keys still needing credentials
+    - ``_services``: collected ``{service: config}`` so far
+    - ``_owm_key``: scratch storage during the OWM sub-flow
 
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        """Return the options flow handler."""
-        return WeatherUploaderOptionsFlow()
+    When ``_pending`` is exhausted, :meth:`_credentials_done` decides
+    what happens next; each flow overrides it.
+    """
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Pick which networks to upload to."""
-        if user_input is not None:
-            self._pending = list(user_input[CONF_SERVICES])
-            self._interval = user_input[CONF_INTERVAL]
-            return await self.async_step_credentials()
+    hass: Any
+    _pending: list[str]
+    _services: dict[str, dict[str, Any]]
+    _owm_key: str
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_SERVICES): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=SERVICES,
-                            multiple=True,
-                            translation_key="services",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_INTERVAL, default=DEFAULT_INTERVAL
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=MIN_INTERVAL,
-                            max=3600,
-                            step=30,
-                            unit_of_measurement="s",
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    ),
-                }
-            ),
-        )
+    async def _credentials_done(self) -> ConfigFlowResult:
+        """Continue once all pending credentials are collected.
+
+        Overridden by each flow: initial setup goes to sensor mapping,
+        the options flow writes the updated networks and reloads.
+        """
+        raise NotImplementedError
+
+    async def _credentials_done(self) -> ConfigFlowResult:
+        """Continue after all pending credentials are collected.
+
+        Initial setup proceeds to sensor mapping. The options flow
+        overrides this to write the updated networks and reload.
+        """
+        return await self.async_step_sensors()
 
     async def async_step_credentials(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Collect credentials for each selected network in turn."""
         if not self._pending:
-            return await self.async_step_sensors()
+            return await self._credentials_done()
 
         service = self._pending[0]
 
@@ -363,6 +346,66 @@ class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+
+class WeatherUploaderConfigFlow(_CredentialSteps, ConfigFlow, domain=DOMAIN):
+    """Handle initial setup."""
+
+    VERSION = 1
+
+    async def _credentials_done(self) -> ConfigFlowResult:
+        """Proceed to sensor mapping for initial setup."""
+        return await self.async_step_sensors()
+
+    def __init__(self) -> None:
+        """Initialise flow state."""
+        self._services: dict[str, dict[str, Any]] = {}
+        self._pending: list[str] = []
+        self._interval: int = DEFAULT_INTERVAL
+        self._mapping: dict[str, Any] = {}
+        self._mapping_warnings: list[str] = []
+        self._owm_key: str = ""
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Return the options flow handler."""
+        return WeatherUploaderOptionsFlow()
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick which networks to upload to."""
+        if user_input is not None:
+            self._pending = list(user_input[CONF_SERVICES])
+            self._interval = user_input[CONF_INTERVAL]
+            return await self.async_step_credentials()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SERVICES): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=SERVICES,
+                            multiple=True,
+                            translation_key="services",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_INTERVAL, default=DEFAULT_INTERVAL
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=MIN_INTERVAL,
+                            max=3600,
+                            step=30,
+                            unit_of_measurement="s",
+                            mode=selector.NumberSelectorMode.BOX,
+                        )
+                    ),
+                }
+            ),
+        )
+
     async def async_step_sensors(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -403,13 +446,17 @@ class WeatherUploaderConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class WeatherUploaderOptionsFlow(OptionsFlow):
-    """Handle re-mapping sensors and changing the interval.
+class WeatherUploaderOptionsFlow(_CredentialSteps, OptionsFlow):
+    """Edit an existing entry: sensor mapping, interval, and networks.
 
-    Credentials are intentionally not editable here. Options are stored
-    separately from entry data, so exposing secrets in this form would
-    write them to .storage twice. Remove and re-add the entry to rotate
-    a key.
+    Re-mapping sensors and changing intervals write to entry options.
+    Adding or removing a network edits entry data instead, because
+    that is where each network's credentials live -- writing them into
+    options would duplicate secrets in .storage. Adding reuses the same
+    credential steps as initial setup via the shared mixin.
+
+    Existing-key rotation is still not offered here; remove and re-add
+    the network to change its credentials.
     """
 
     # No custom __init__: modern OptionsFlow exposes config_entry as a
@@ -418,6 +465,15 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
     # lazily via getattr where it is used.
 
     async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show the top-level menu: edit mapping or manage networks."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["settings", "add_network", "remove_network"],
+        )
+
+    async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show the mapping and interval form."""
@@ -455,7 +511,7 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
             ): _max_age_selector(),
         }
         schema.update(_sensor_schema(current).schema)
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
+        return self.async_show_form(step_id="settings", data_schema=vol.Schema(schema))
 
     async def async_step_confirm_mapping(
         self, user_input: dict[str, Any] | None = None
@@ -471,4 +527,94 @@ class WeatherUploaderOptionsFlow(OptionsFlow):
             description_placeholders={
                 "warnings": "\n".join(getattr(self, "_mapping_warnings", []))
             },
+        )
+
+    # --- Add / remove networks (edits entry.data) -----------------------
+
+    def _configured_services(self) -> dict[str, dict[str, Any]]:
+        """Return the currently configured {service: config} mapping."""
+        return dict(self.config_entry.data.get(CONF_SERVICES, {}))
+
+    async def _credentials_done(self) -> ConfigFlowResult:
+        """Persist newly added networks into entry data and reload.
+
+        The credential steps collected into ``self._services`` here; we
+        merge them with the existing networks, write the combined set to
+        entry data, and let the update listener reload the entry so the
+        new uploaders start.
+        """
+        merged = {**self._configured_services(), **self._services}
+        new_data = {**self.config_entry.data, CONF_SERVICES: merged}
+        self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+        return self.async_create_entry(title="", data=dict(self.config_entry.options))
+
+    async def async_step_add_network(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose one or more not-yet-configured networks to add."""
+        existing = set(self._configured_services())
+        available = [s for s in SERVICES if s not in existing]
+
+        if not available:
+            return self.async_abort(reason="all_networks_configured")
+
+        if user_input is not None:
+            # Reuse the shared credential steps for the chosen networks.
+            self._pending = list(user_input[CONF_SERVICES])
+            self._services = {}
+            self._owm_key = ""
+            return await self.async_step_credentials()
+
+        schema = {
+            vol.Required(CONF_SERVICES): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=available,
+                    multiple=True,
+                    translation_key="services",
+                )
+            )
+        }
+        return self.async_show_form(
+            step_id="add_network", data_schema=vol.Schema(schema)
+        )
+
+    async def async_step_remove_network(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose one or more configured networks to remove.
+
+        Removing a network drops it from entry data, including its
+        stored credentials, and reloads so its uploader stops. Sensor
+        mappings are left untouched: they are shared across networks.
+        """
+        configured = self._configured_services()
+
+        if not configured:
+            return self.async_abort(reason="no_networks_configured")
+
+        if user_input is not None:
+            remaining = {
+                svc: cfg
+                for svc, cfg in configured.items()
+                if svc not in user_input[CONF_SERVICES]
+            }
+            new_data = {**self.config_entry.data, CONF_SERVICES: remaining}
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+            return self.async_create_entry(
+                title="", data=dict(self.config_entry.options)
+            )
+
+        schema = {
+            vol.Required(CONF_SERVICES): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=list(configured),
+                    multiple=True,
+                    translation_key="services",
+                )
+            )
+        }
+        return self.async_show_form(
+            step_id="remove_network", data_schema=vol.Schema(schema)
         )
