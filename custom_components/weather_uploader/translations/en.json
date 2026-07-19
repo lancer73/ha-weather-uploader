@@ -34,22 +34,6 @@
         "title": "Map your sensors",
         "description": "Select the Home Assistant entity for each field you want to publish. Leave a field blank to omit it. Units are converted automatically from each entity's declared unit. Note: rain_rate must be an instantaneous rate sensor, not an hourly accumulation. Readings that fall outside a sane range for a field (for example a pressure that looks like Pascals rather than hPa) are dropped at runtime and flagged on the 'Source data problem' sensor."
       },
-      "credentials_open": {
-        "title": "Station details for {service}",
-        "description": "This network has NO authentication. Your station is identified by its station ID alone, with no key or password. Anyone who learns or guesses that ID can publish observations as your station, and there is nothing to rotate if that happens. Unlike some networks there is no authenticated alternative here, so this is the only way to participate. Only continue if that trade is acceptable to you.",
-        "data": {
-          "station_id": "Station ID",
-          "latitude": "Latitude",
-          "longitude": "Longitude",
-          "altitude": "Altitude"
-        },
-        "data_description": {
-          "station_id": "The station ID emailed to you at registration.",
-          "latitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
-          "longitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
-          "altitude": "Station ground elevation in metres above sea level."
-        }
-      },
       "confirm_mapping": {
         "title": "Check sensor mapping",
         "description": "Some mappings look unusual. You can still continue — these are warnings, not errors, and are often fine for custom or DIY sensors.\n\n{warnings}\n\nSelect Submit to save the mapping as-is, or go back to change it."
@@ -68,7 +52,7 @@
       },
       "owm_create": {
         "title": "Create OpenWeatherMap station",
-        "description": "This registers a new station on your OpenWeatherMap account and stores the internal ID it returns. If a station with the same identifier already exists, it is reused rather than duplicated.",
+        "description": "This registers a new station on your OpenWeatherMap account and stores the internal ID it returns. The location is pre-filled from your Home Assistant settings — adjust it if you'd rather publish a rounded or different location. If a station with the same identifier already exists, it is reused rather than duplicated.",
         "data": {
           "external_id": "Station identifier",
           "name": "Station name",
@@ -78,10 +62,10 @@
         },
         "data_description": {
           "external_id": "A short label of your choosing (letters, digits, underscores). Not the internal ID — OpenWeatherMap generates that.",
-          "name": "A display name for the station on OpenWeatherMap.",
-          "latitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
-          "longitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
-          "altitude": "Station ground elevation in metres above sea level."
+          "name": "Pre-filled from your Home Assistant location name. A display name for the station on OpenWeatherMap.",
+          "latitude": "Pre-filled from Home Assistant. Round to ~3 decimals (about 100 m) if you don't want your exact location published.",
+          "longitude": "Pre-filled from Home Assistant. Round to ~3 decimals (about 100 m) if you don't want your exact location published.",
+          "altitude": "Pre-filled from your Home Assistant elevation. Station ground elevation in metres."
         }
       },
       "owm_existing": {
@@ -159,9 +143,7 @@
         "cwop": "CWOP / NOAA (feeds MADIS + National Weather Service)",
         "pwsweather": "PWSWeather",
         "windy": "Windy",
-        "openweathermap": "OpenWeatherMap",
-        "wetternetzwerk": "Wetternetzwerk.pro (Germany)",
-        "meteo_services": "Meteo-Services (Germany, no authentication)"
+        "openweathermap": "OpenWeatherMap"
       }
     },
     "owm_mode": {
