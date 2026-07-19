@@ -18,14 +18,32 @@ Supported networks:
 | Wetternetzwerk.pro (Germany) | `api.wetternetzwerk.pro/weatherstation/updateweatherstation.php` | GET query | Station key | Imperial |
 | Meteo-Services (Germany) | `channel1.meteo-services.com/stations/index.php` | POST form | **None** — station ID only | Metric |
 
-Two of these networks are run by national meteorological services and
-put contributed data to operational and scientific use. **CWOP** feeds
-NOAA's MADIS, which supplies National Weather Service forecasters and
-researchers (see [CWOP](#cwop--noaa)). **WOW-BE** is the KMI/KNMI
-network: KNMI states that Dutch WOW observations feed the maps in the
-KNMI app and contribute to research such as urban-heat studies and more
-detailed extreme-weather advice. The other networks are primarily
-community and hobbyist platforms.
+Where your data ends up varies by network, and none of these are
+purely hobbyist. A rough spectrum:
+
+- **National weather services.** **CWOP** feeds NOAA's MADIS, which
+  supplies National Weather Service forecasters and researchers (see
+  [CWOP](#cwop--noaa)). **WOW-BE** is run by KMI/KNMI; KNMI states that
+  Dutch WOW observations feed the maps in the KNMI app and contribute to
+  research such as urban-heat studies and more detailed extreme-weather
+  advice.
+- **Commercial data platforms.** **Weather Underground** is part of The
+  Weather Company (an IBM business), which sells the aggregated PWS data
+  through enterprise data packages. **Windy** and **OpenWeatherMap** run
+  paid, professional API tiers over their data; OpenWeatherMap markets
+  agriculture, logistics, insurance, and forestry use explicitly. So
+  contributing to these is contributing to a commercial product, not
+  only a public map.
+- **Community and regional networks.** **PWSWeather**,
+  **Wetternetzwerk.pro**, and **Meteo-Services** are primarily
+  enthusiast and regional-hobbyist platforms, though even these may be
+  consumed by third parties.
+
+The practical takeaway: your observations may be used well beyond a
+personal dashboard — by forecasters, researchers, or commercial data
+buyers, depending on the network. If that matters to you, weigh it per
+network before enabling it, and note the coordinate-precision guidance
+below.
 
 **Meteo-Services has no authentication.** See
 [Networks without authentication](#networks-without-authentication).
