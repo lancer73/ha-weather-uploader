@@ -116,7 +116,7 @@ class WindyUploader(BaseUploader):
             ) as response:
                 body = (await response.text())[:200]
                 if response.status == 200:
-                    self.last_error = None
+                    self.clear_error()
                     _LOGGER.debug("Windy upload OK")
                     return True
 
@@ -127,16 +127,20 @@ class WindyUploader(BaseUploader):
                     409: "duplicate observation",
                     429: "rate limited (max once per 5 minutes)",
                 }.get(response.status, body)
-                self.last_error = f"HTTP {response.status}: {reason}"
+                self.record_error(
+                    "http_error",
+                    f"HTTP {response.status}: {reason}",
+                    status=response.status,
+                )
                 _LOGGER.warning(
                     "Windy upload failed (HTTP %s): %s", response.status, reason
                 )
                 return False
         except aiohttp.ClientError as err:
-            self.last_error = str(err)
+            self.record_error(self.classify_client_error(err), str(err))
             _LOGGER.warning("Windy upload error: %s", err)
             return False
         except TimeoutError:
-            self.last_error = "timeout"
+            self.record_error("timeout", "timeout")
             _LOGGER.warning("Windy upload timed out")
             return False

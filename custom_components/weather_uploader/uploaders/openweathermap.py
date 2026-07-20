@@ -112,9 +112,13 @@ class OpenWeatherMapUploader(BaseUploader):
                 # create-station codes and do not apply here; accepting
                 # them would only mask a misrouted request.
                 if response.status == 204:
-                    self.last_error = None
+                    self.clear_error()
                     return True
-                self.last_error = f"HTTP {response.status}: {body}"
+                self.record_error(
+                    "http_error",
+                    f"HTTP {response.status}: {body}",
+                    status=response.status,
+                )
                 _LOGGER.warning(
                     "OpenWeatherMap upload failed (HTTP %s): %s",
                     response.status,
@@ -122,10 +126,10 @@ class OpenWeatherMapUploader(BaseUploader):
                 )
                 return False
         except aiohttp.ClientError as err:
-            self.last_error = str(err)
+            self.record_error(self.classify_client_error(err), str(err))
             _LOGGER.warning("OpenWeatherMap upload error: %s", err)
             return False
         except TimeoutError:
-            self.last_error = "timeout"
+            self.record_error("timeout", "timeout")
             _LOGGER.warning("OpenWeatherMap upload timed out")
             return False

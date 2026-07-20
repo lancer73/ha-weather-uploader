@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +79,8 @@ class BaseUploader(ABC):
         self._key = key
         self.min_interval = min_interval
         self._last_error: str | None = None
+        self._last_error_code: str | None = None
+        self._last_error_time: datetime | None = None
         self._last_payload: dict[str, Any] = {}
         # Seed the throttle as if a send just happened, so the first
         # upload after start (or after a Home Assistant restart, which
@@ -89,12 +93,12 @@ class BaseUploader(ABC):
 
     @property
     def last_error(self) -> str | None:
-        """The last upload error, or None. Credentials are redacted."""
+        """The last upload error message, or None. Credentials redacted."""
         return self._last_error
 
     @last_error.setter
     def last_error(self, value: str | None) -> None:
-        """Store an error, redacting the key first.
+        """Store an error message, redacting the key first.
 
         Error strings can embed the request -- an aiohttp InvalidURL, for
         instance, includes the URL, which for some providers carries the
@@ -102,6 +106,64 @@ class BaseUploader(ABC):
         attributes, so redact the key value before storing it.
         """
         self._last_error = self._redact(value)
+
+    @property
+    def last_error_code(self) -> str | None:
+        """A short, stable code for the last error (e.g. 'dns', 'http_500').
+
+        Stable across occurrences of the same failure, so it is suitable
+        as a sensor state that the recorder can graph and count. None
+        when the last send succeeded.
+        """
+        return self._last_error_code
+
+    @property
+    def last_error_time(self) -> datetime | None:
+        """When the last error was recorded, or None."""
+        return self._last_error_time
+
+    def record_error(
+        self, code: str, message: str, *, status: int | None = None
+    ) -> None:
+        """Record a failed send: a short code, a message, and the time.
+
+        ``code`` is a stable short string for the sensor state; when a
+        ``status`` is given it is folded in as ``http_<status>``.
+        """
+        self._last_error_code = f"http_{status}" if status is not None else code
+        self.last_error = message  # redacts the key
+        self._last_error_time = dt_util.utcnow()
+
+    def clear_error(self) -> None:
+        """Record a successful send: no error, no code."""
+        self._last_error = None
+        self._last_error_code = None
+        # last_error_time is left as the last failure's time, so history
+        # shows when the most recent problem happened; the code being
+        # None is what signals "currently OK".
+
+    @staticmethod
+    def classify_client_error(err: Exception) -> str:
+        """Map an aiohttp/OS exception to a short, stable code.
+
+        Distinguishes the common transient failures -- DNS resolution,
+        connection refused/reset, TLS -- so the sensor state is
+        meaningful rather than a single opaque 'connection'.
+        """
+        import socket
+
+        if isinstance(err, aiohttp.ClientConnectorError):
+            os_err = getattr(err, "os_error", None)
+            if isinstance(os_err, socket.gaierror):
+                return "dns"
+            return "connection"
+        if isinstance(err, aiohttp.ServerTimeoutError):
+            return "timeout"
+        if isinstance(err, aiohttp.ClientConnectionError):
+            return "connection"
+        if isinstance(err, aiohttp.ClientSSLError):
+            return "tls"
+        return "client_error"
 
     def _redact(self, text: str | None) -> str | None:
         """Replace the key value with a placeholder in an error string."""
@@ -223,7 +285,11 @@ class BaseUploader(ABC):
             ) as response:
                 body = (await response.text())[:_BODY_LOG_LIMIT]
                 if response.status != 200:
-                    self.last_error = f"HTTP {response.status}: {body}"
+                    self.record_error(
+                        "http_error",
+                        f"HTTP {response.status}: {body}",
+                        status=response.status,
+                    )
                     _LOGGER.warning(
                         "%s upload failed (HTTP %s): %s",
                         self.name,
@@ -231,14 +297,14 @@ class BaseUploader(ABC):
                         body,
                     )
                     return False
-                self.last_error = None
+                self.clear_error()
                 _LOGGER.debug("%s upload OK: %s", self.name, body)
                 return True
         except aiohttp.ClientError as err:
-            self.last_error = str(err)
+            self.record_error(self.classify_client_error(err), str(err))
             _LOGGER.warning("%s upload error: %s", self.name, err)
             return False
         except TimeoutError as err:
-            self.last_error = f"timeout: {err}"
+            self.record_error("timeout", f"timeout: {err}")
             _LOGGER.warning("%s upload timed out", self.name)
             return False

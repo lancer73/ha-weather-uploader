@@ -165,23 +165,35 @@ class WowBeUploader(BaseUploader):
             ) as response:
                 body = (await response.text())[:200]
                 if response.status == 200:
-                    self.last_error = None
+                    self.clear_error()
                     return True
                 if response.status == 403:
-                    self.last_error = "invalid site credentials (HTTP 403)"
+                    self.record_error(
+                        "http_error", "invalid site credentials (HTTP 403)", status=403
+                    )
                 elif response.status == 422:
-                    self.last_error = f"validation failed (HTTP 422): {body}"
+                    self.record_error(
+                        "http_error",
+                        f"validation failed (HTTP 422): {body}",
+                        status=422,
+                    )
                 elif response.status == 429:
-                    self.last_error = "rate limited (HTTP 429)"
+                    self.record_error(
+                        "http_error", "rate limited (HTTP 429)", status=429
+                    )
                 else:
-                    self.last_error = f"HTTP {response.status}: {body}"
+                    self.record_error(
+                        "http_error",
+                        f"HTTP {response.status}: {body}",
+                        status=response.status,
+                    )
                 _LOGGER.warning("%s upload failed: %s", self.name, self.last_error)
                 return False
         except aiohttp.ClientError as err:
-            self.last_error = str(err)
+            self.record_error(self.classify_client_error(err), str(err))
             _LOGGER.warning("%s upload error: %s", self.name, err)
             return False
         except TimeoutError:
-            self.last_error = "timeout"
+            self.record_error("timeout", "timeout")
             _LOGGER.warning("%s upload timed out", self.name)
             return False

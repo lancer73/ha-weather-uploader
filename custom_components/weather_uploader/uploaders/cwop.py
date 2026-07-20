@@ -78,6 +78,22 @@ DEFAULT_PORT = 14580
 #: Non-ham CWOP stations authenticate with this literal passcode.
 CWOP_PASSCODE = "-1"
 
+
+def _classify_os_error(err: Exception) -> str:
+    """Map a socket/OS error to a short, stable code for the sensor state."""
+    import socket
+
+    if isinstance(err, socket.gaierror):
+        return "dns"
+    if isinstance(err, ConnectionRefusedError):
+        return "connection_refused"
+    if isinstance(err, ConnectionResetError):
+        return "connection_reset"
+    if isinstance(err, OSError):
+        return "connection"
+    return "error"
+
+
 SOFTWARE_NAME = "HomeAssistantWeatherUploader"
 SOFTWARE_VERSION = "1.0"
 
@@ -275,15 +291,15 @@ class CwopUploader(BaseUploader):
             await asyncio.wait_for(writer.drain(), timeout=IO_TIMEOUT)
 
             # There is no application-level ack: TCP delivery is the ack.
-            self.last_error = None
+            self.clear_error()
             _LOGGER.debug("CWOP packet sent: %s", packet)
             return True
         except TimeoutError:
-            self.last_error = "timeout"
+            self.record_error("timeout", "timeout")
             _LOGGER.warning("CWOP upload timed out")
             return False
         except (OSError, UnicodeEncodeError) as err:
-            self.last_error = str(err)
+            self.record_error(_classify_os_error(err), str(err))
             _LOGGER.warning("CWOP upload error: %s", err)
             return False
         finally:
