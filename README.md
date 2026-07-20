@@ -304,10 +304,14 @@ no reason to collect coordinates for networks that never receive them.
 (OpenWeatherMap also uses coordinates, but only once, when creating the
 station, and it pre-fills them from your Home Assistant location.)
 
+The CWOP fields are pre-filled from your Home Assistant location,
+**rounded to ~3 decimals (about 100 m)** so the default does not publish
+your exact dwelling. You normally just accept them; enter a more precise
+value only if you specifically want your exact position published.
+
 **These are published.** CWOP plots contributing stations publicly. Six
 decimal places locates a doorway; three (~100 m) is ample for
-meteorology. Round before entering unless you specifically want your
-exact position on a public map.
+meteorology, which is why the pre-filled default is rounded.
 
 For CWOP specifically, the status sensor's `last_payload` attribute
 contains the full APRS packet, including your coordinates, and that
@@ -419,7 +423,28 @@ above.
 
 ## Entities
 
-### One per network
+### One error-status sensor per network
+
+`sensor.weather_network_uploader_<network>_last_error`, e.g.
+`..._windy_last_error`.
+
+Unlike the binary sensor's `last_error` *attribute*, this is a real
+entity **state**, so Home Assistant's recorder keeps a history of it.
+That is the point: an intermittent failure such as a DNS timeout leaves
+a durable, graphable trail instead of only showing in an attribute you
+have to catch in the act.
+
+- **State:** a short, stable code — `ok` when the last upload succeeded,
+  otherwise the failure kind: `timeout`, `dns`, `connection`,
+  `connection_refused`, `connection_reset`, `tls`, `client_error`, or
+  `http_<status>` (e.g. `http_429`, `http_500`). The codes are
+  low-cardinality on purpose, so they graph and count cleanly.
+- **`last_error`:** the full, credential-redacted message.
+- **`last_error_time`:** when the most recent error occurred (ISO 8601).
+  This is left in place after a later success, so the state returns to
+  `ok` while the timestamp still shows when the last problem was.
+
+### One connectivity sensor per network
 
 `binary_sensor.weather_network_uploader_<network>_upload`, e.g.
 `..._wow_be_upload`. Device class `connectivity`.

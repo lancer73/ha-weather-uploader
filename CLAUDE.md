@@ -29,7 +29,8 @@ custom_components/weather_uploader/
 ├── const.py              DOMAIN, SENSOR_KEYS, service ids, hosts
 ├── config_flow.py        3-step config flow + options flow
 ├── coordinator.py        entity read, unit normalization, fan-out
-├── binary_sensor.py      one status entity per network
+├── binary_sensor.py      one connectivity entity per network + a data-health entity
+├── sensor.py             one last-error status entity per network (state = short code)
 ├── translations/en.json  all user-facing strings
 ├── brand/                icon.png + icon@2x.png (generated)
 └── uploaders/
@@ -429,7 +430,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.6.0**. Semantic Versioning 2.0.0.
+Current release: **0.7.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 

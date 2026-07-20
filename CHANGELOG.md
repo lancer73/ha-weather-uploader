@@ -7,10 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-20
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Added
+
+- A per-network error-status sensor
+  (`sensor.weather_network_uploader_<network>_last_error`). Its state is
+  a short, stable code -- `ok`, or a failure kind such as `timeout`,
+  `dns`, `connection`, `tls`, or `http_<status>` -- so, unlike the
+  binary sensor's `last_error` attribute, Home Assistant's recorder
+  keeps a history of it. An intermittent failure such as a DNS timeout
+  now leaves a durable, graphable trail. The full credential-redacted
+  message and the time of the last error are exposed as attributes.
+  Errors are classified from the exception type (for example, a DNS
+  resolution failure is distinguished from a refused connection) rather
+  than by matching the message text.
+
+- CWOP's latitude and longitude fields are pre-filled from your Home
+  Assistant location, rounded to ~3 decimals (~100 m) so the default
+  does not publish your exact dwelling to APRS-IS. You can still enter a
+  more precise value. This matches the existing OpenWeatherMap
+  station-location pre-fill.
+
+### Fixed
+
+- A throttle test was intermittently failing due to floating-point
+  rounding at an exact interval boundary (the live monotonic seed is a
+  large float, and `(seed + 300) - seed` is not always exactly `300.0`).
+  The test now uses a fixed base for exact arithmetic. This is a
+  test-only change; the throttle behaviour was already correct.
+
 ## [0.6.0] - 2026-07-20
 
 Pre-1.0: the configuration schema and entity IDs may still change before
 1.0.0.
+
+### Changed
+
+- `DeviceInfo` now uses the `DeviceEntryType.SERVICE` enum instead of
+  the deprecated string form, and the coordinator is stored on
+  `entry.runtime_data` rather than `hass.data`, following current Home
+  Assistant patterns.
 
 ### Fixed
 
@@ -69,13 +109,6 @@ Pre-1.0: the configuration schema and entity IDs may still change before
   Each uploader declares its accepted readings (`SUPPORTED_READINGS`),
   so the figure excludes request metadata such as timestamps and
   station identifiers.
-
-### Changed
-
-- `DeviceInfo` now uses the `DeviceEntryType.SERVICE` enum instead of
-  the deprecated string form, and the coordinator is stored on
-  `entry.runtime_data` rather than `hass.data`, following current Home
-  Assistant patterns.
 
 ## [0.5.0] - 2026-07-19
 
@@ -478,7 +511,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.3.0...v0.4.0
