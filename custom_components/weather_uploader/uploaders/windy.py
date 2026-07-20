@@ -59,6 +59,23 @@ _LOGGER = logging.getLogger(__name__)
 class WindyUploader(BaseUploader):
     """Upload to Windy via the v2 WU-compatible observation endpoint."""
 
+    #: Normalized reading keys this network accepts. Drives the
+    #: measurement count reported by the status sensor.
+    SUPPORTED_READINGS: frozenset[str] = frozenset(
+        {
+            "dewpoint",
+            "humidity",
+            "pressure_absolute",
+            "rain_hourly",
+            "solar_radiation",
+            "temperature",
+            "uv_index",
+            "wind_direction",
+            "wind_gust",
+            "wind_speed",
+        }
+    )
+
     name = "Windy"
     url = "https://stations.windy.com/api/v2/observation/update"
 
@@ -91,6 +108,7 @@ class WindyUploader(BaseUploader):
         record only the endpoint and status.
         """
         params = self._prune(self.build_params(data))
+        self._last_payload = self._redact_payload(params)
         params["PASSWORD"] = self._key
         try:
             async with self._session.get(

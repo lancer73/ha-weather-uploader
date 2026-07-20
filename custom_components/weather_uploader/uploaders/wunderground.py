@@ -15,6 +15,36 @@ class WundergroundUploader(BaseUploader):
     will appear in Weather Underground's own access logs.
     """
 
+    #: Normalized reading keys this network accepts. Drives the
+    #: measurement count reported by the status sensor.
+    SUPPORTED_READINGS: frozenset[str] = frozenset(
+        {
+            "dewpoint",
+            "humidity",
+            "indoor_humidity",
+            "indoor_temperature",
+            "leaf_wetness",
+            "pm10",
+            "pm25",
+            "pressure_relative",
+            "rain_daily",
+            "rain_hourly",
+            "rain_monthly",
+            "rain_weekly",
+            "rain_yearly",
+            "soil_moisture",
+            "soil_temperature",
+            "solar_radiation",
+            "temperature",
+            "uv_index",
+            "visibility",
+            "wind_direction",
+            "wind_gust",
+            "wind_gust_direction",
+            "wind_speed",
+        }
+    )
+
     name = "Weather Underground"
     url = (
         "https://weatherstation.wunderground.com"

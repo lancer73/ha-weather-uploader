@@ -55,9 +55,15 @@ def build_uploader(
     interval = MIN_SERVICE_INTERVAL.get(service, 0)
 
     # CWOP authenticates with the fixed passcode -1: it identifies by
-    # station id only, with no key.
+    # station id only, with no key. It also needs coordinates on every
+    # packet -- without them it would report from (0, 0) (Null Island),
+    # which a pre-geo config entry surviving an upgrade could trigger
+    # silently. Skip it instead, so the warning in _build_uploaders
+    # surfaces the problem and the user re-adds it with coordinates.
     if service == SERVICE_CWOP:
-        if not station_id:
+        latitude = config.get(CONF_LATITUDE)
+        longitude = config.get(CONF_LONGITUDE)
+        if not station_id or latitude is None or longitude is None:
             return None
     elif not key:
         return None
@@ -67,8 +73,8 @@ def build_uploader(
             session,
             station_id,
             min_interval=interval,
-            latitude=float(config.get(CONF_LATITUDE, 0.0)),
-            longitude=float(config.get(CONF_LONGITUDE, 0.0)),
+            latitude=float(latitude),
+            longitude=float(longitude),
         )
 
     if service == SERVICE_WUNDERGROUND:

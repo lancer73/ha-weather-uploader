@@ -15,6 +15,28 @@ class PWSWeatherUploader(BaseUploader):
     query parameters.
     """
 
+    #: Normalized reading keys this network accepts. Drives the
+    #: measurement count reported by the status sensor.
+    SUPPORTED_READINGS: frozenset[str] = frozenset(
+        {
+            "dewpoint",
+            "humidity",
+            "pressure_relative",
+            "rain_daily",
+            "rain_hourly",
+            "rain_monthly",
+            "rain_yearly",
+            "soil_moisture",
+            "soil_temperature",
+            "solar_radiation",
+            "temperature",
+            "uv_index",
+            "wind_direction",
+            "wind_gust",
+            "wind_speed",
+        }
+    )
+
     name = "PWSWeather"
     url = "https://pwsupdate.pwsweather.com/api/v1/submitwx"
 

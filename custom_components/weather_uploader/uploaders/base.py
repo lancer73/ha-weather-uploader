@@ -76,7 +76,8 @@ class BaseUploader(ABC):
         self._id = station_id
         self._key = key
         self.min_interval = min_interval
-        self.last_error: str | None = None
+        self._last_error: str | None = None
+        self._last_payload: dict[str, Any] = {}
         # Seed the throttle as if a send just happened, so the first
         # upload after start (or after a Home Assistant restart, which
         # rebuilds every uploader) waits min_interval rather than firing
@@ -85,6 +86,28 @@ class BaseUploader(ABC):
         # returns 429 inside its 5-minute window. min_interval <= 0
         # (no throttle) is unaffected: is_due short-circuits to True.
         self.last_sent: float | None = time.monotonic() if min_interval > 0 else None
+
+    @property
+    def last_error(self) -> str | None:
+        """The last upload error, or None. Credentials are redacted."""
+        return self._last_error
+
+    @last_error.setter
+    def last_error(self, value: str | None) -> None:
+        """Store an error, redacting the key first.
+
+        Error strings can embed the request -- an aiohttp InvalidURL, for
+        instance, includes the URL, which for some providers carries the
+        key as a query parameter. last_error surfaces in entity
+        attributes, so redact the key value before storing it.
+        """
+        self._last_error = self._redact(value)
+
+    def _redact(self, text: str | None) -> str | None:
+        """Replace the key value with a placeholder in an error string."""
+        if text and self._key:
+            return text.replace(self._key, "***")
+        return text
 
     def is_due(self, now: float | None = None) -> bool:
         """Return True when enough time has passed to send again.
@@ -110,9 +133,65 @@ class BaseUploader(ABC):
         """
         self.last_sent = time.monotonic()
 
+    #: Normalized reading keys this network accepts. Subclasses override
+    #: this; it drives the measurement count the status sensor reports,
+    #: so that count means the same thing for every network regardless of
+    #: wire format. CWOP packs many measurements into one packet string,
+    #: which would otherwise count as a single field.
+    SUPPORTED_READINGS: frozenset[str] = frozenset()
+
+    def measurement_count(self, data: dict[str, float]) -> int:
+        """Return how many weather measurements this network sent.
+
+        This counts the mapped readings the network actually accepts and
+        that were present this cycle -- not the number of keys in the
+        request. Those differ: the request also carries metadata
+        (timestamps, station id, software type), and CWOP encodes every
+        measurement into a single packet string. Counting on the reading
+        side gives a consistent "measurements sent" figure across all
+        networks.
+        """
+        return sum(1 for key in self.SUPPORTED_READINGS if data.get(key) is not None)
+
     @abstractmethod
     def build_params(self, data: dict[str, float]) -> dict[str, Any]:
         """Map normalized data onto provider query parameters."""
+
+    # Field names that carry a credential in some provider's payload.
+    # build_payload strips these so a status attribute can never expose a
+    # secret, regardless of where an uploader happens to add it. WOW-BE,
+    # for instance, builds PASSWORD directly into its params.
+    _CREDENTIAL_FIELDS: frozenset[str] = frozenset(
+        {"PASSWORD", "password", "appid", "apikey", "api_key", "key", "token"}
+    )
+
+    def build_payload(self, data: dict[str, float]) -> dict[str, Any]:
+        """Return the fields this network would send for ``data``.
+
+        This is ``build_params`` after pruning unset values and redacting
+        credentials -- a preview of what goes on the wire. The status
+        entity reports the payload actually sent (recorded during
+        :meth:`send` as ``last_payload``); this method is used before a
+        send and by tests.
+        """
+        return self._redact_payload(self._prune(self.build_params(data)))
+
+    def _redact_payload(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Drop credential fields so a payload is safe to expose.
+
+        WOW-BE, for instance, builds ``PASSWORD`` into its params, so a
+        status attribute must never surface the raw dict.
+        """
+        return {
+            key: value
+            for key, value in params.items()
+            if key not in self._CREDENTIAL_FIELDS
+        }
+
+    @property
+    def last_payload(self) -> dict[str, Any]:
+        """The redacted payload actually sent on the last :meth:`send`."""
+        return self._last_payload
 
     @staticmethod
     def _prune(params: dict[str, Any]) -> dict[str, Any]:
@@ -137,6 +216,7 @@ class BaseUploader(ABC):
     async def send(self, data: dict[str, float]) -> bool:
         """Send an observation. Returns True on success."""
         params = self._prune(self.build_params(data))
+        self._last_payload = self._redact_payload(params)
         try:
             async with self._session.get(
                 self.url, params=params, timeout=TIMEOUT

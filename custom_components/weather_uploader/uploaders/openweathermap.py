@@ -50,6 +50,23 @@ class OpenWeatherMapUploader(BaseUploader):
     for most fields, so most values pass straight through.
     """
 
+    #: Normalized reading keys this network accepts. Drives the
+    #: measurement count reported by the status sensor.
+    SUPPORTED_READINGS: frozenset[str] = frozenset(
+        {
+            "dewpoint",
+            "humidity",
+            "pressure_relative",
+            "rain_24h",
+            "rain_hourly",
+            "temperature",
+            "visibility",
+            "wind_direction",
+            "wind_gust",
+            "wind_speed",
+        }
+    )
+
     name = "OpenWeatherMap"
     url = "https://api.openweathermap.org/data/3.0/measurements"
 
@@ -80,6 +97,7 @@ class OpenWeatherMapUploader(BaseUploader):
     async def send(self, data: dict[str, float]) -> bool:
         """POST a single-element measurement batch to OWM."""
         payload = self._prune(self.build_params(data))
+        self._last_payload = self._redact_payload(payload)
         try:
             async with self._session.post(
                 self.url,

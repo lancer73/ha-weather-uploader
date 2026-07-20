@@ -194,6 +194,23 @@ class CwopUploader(BaseUploader):
     configurable.
     """
 
+    #: Normalized reading keys this network accepts. Drives the
+    #: measurement count reported by the status sensor.
+    SUPPORTED_READINGS: frozenset[str] = frozenset(
+        {
+            "humidity",
+            "pressure_relative",
+            "rain_24h",
+            "rain_daily",
+            "rain_hourly",
+            "solar_radiation",
+            "temperature",
+            "wind_direction",
+            "wind_gust",
+            "wind_speed",
+        }
+    )
+
     name = "CWOP"
 
     def __init__(
@@ -232,6 +249,7 @@ class CwopUploader(BaseUploader):
     async def send(self, data: dict[str, float]) -> bool:
         """Connect, log in, send one packet, disconnect."""
         packet = build_packet(self._id or "", self.latitude, self.longitude, data)
+        self._last_payload = {"packet": packet}
         login = (
             f"user {self._id} pass {CWOP_PASSCODE} "
             f"vers {SOFTWARE_NAME} {SOFTWARE_VERSION}"

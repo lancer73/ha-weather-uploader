@@ -65,6 +65,29 @@ class WowBeUploader(BaseUploader):
     every other provider this integration supports.
     """
 
+    #: Normalized reading keys this network accepts. Drives the
+    #: measurement count reported by the status sensor.
+    SUPPORTED_READINGS: frozenset[str] = frozenset(
+        {
+            "dewpoint",
+            "humidity",
+            "pressure_absolute",
+            "pressure_relative",
+            "rain_daily",
+            "rain_rate",
+            "soil_moisture",
+            "soil_temperature",
+            "solar_radiation",
+            "temperature",
+            "uv_index",
+            "visibility",
+            "wind_direction",
+            "wind_gust",
+            "wind_gust_direction",
+            "wind_speed",
+        }
+    )
+
     name = "WOW-BE"
 
     def __init__(
@@ -132,6 +155,7 @@ class WowBeUploader(BaseUploader):
     async def send(self, data: dict[str, float]) -> bool:
         """POST an observation to WOW-BE."""
         payload = self._prune(self.build_params(data))
+        self._last_payload = self._redact_payload(payload)
         try:
             async with self._session.post(
                 self.url,
