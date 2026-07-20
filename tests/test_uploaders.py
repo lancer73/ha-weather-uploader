@@ -302,12 +302,16 @@ def test_throttled_uploader_waits_after_construction():
     seeded at construction, so the first send waits min_interval.
     """
     up = WowBeUploader(None, "s", "k", min_interval=300)
+    # Construction seeds the throttle (not None) so a restart does not
+    # fire immediately.
     assert up.last_sent is not None
-    # Not due until an interval has passed from construction.
-    start = up.last_sent
-    assert not up.is_due(now=start)
-    assert not up.is_due(now=start + 299)
-    assert up.is_due(now=start + 300)
+    # Pin last_sent to a small fixed value for exact arithmetic: the live
+    # monotonic seed is a large float, and (seed + 300) - seed does not
+    # always equal exactly 300.0, which made a >= boundary check flaky.
+    up.last_sent = 1000.0
+    assert not up.is_due(now=1000.0)
+    assert not up.is_due(now=1299.0)
+    assert up.is_due(now=1300.0)
 
 
 def test_unthrottled_uploader_is_due_at_construction():

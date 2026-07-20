@@ -139,3 +139,55 @@ async def test_last_payload_reflects_actual_send():
 
     assert "PASSWORD" not in up.last_payload
     assert set(up.last_payload) == set(session.sent) - {"PASSWORD"}
+
+
+# --- CWOP coordinate pre-fill -------------------------------------------
+
+
+async def test_cwop_coordinates_prefill_rounded():
+    """CWOP coords default from HA location, rounded to ~100 m.
+
+    CWOP broadcasts coordinates publicly to APRS-IS, so the default is
+    rounded rather than the exact home location; the user can still enter
+    a more precise value.
+    """
+    from custom_components.weather_uploader.config_flow import (
+        WeatherUploaderConfigFlow,
+    )
+    from custom_components.weather_uploader.const import SERVICE_CWOP
+
+    flow = WeatherUploaderConfigFlow()
+    flow.hass = MagicMock()
+    flow.hass.config.latitude = 52.0906789
+    flow.hass.config.longitude = 5.1214321
+    flow._pending = [SERVICE_CWOP]
+    flow._services = {}
+    flow._owm_key = ""
+
+    result = await flow.async_step_credentials()
+    defaults = {}
+    for marker in result["data_schema"].schema:
+        raw = getattr(marker, "default", None)
+        defaults[str(marker)] = raw() if callable(raw) else raw
+
+    assert defaults["latitude"] == 52.091
+    assert defaults["longitude"] == 5.121
+
+
+async def test_cwop_coordinates_prefill_handles_no_location():
+    """A HA install with no location set still renders the form."""
+    from custom_components.weather_uploader.config_flow import (
+        WeatherUploaderConfigFlow,
+    )
+    from custom_components.weather_uploader.const import SERVICE_CWOP
+
+    flow = WeatherUploaderConfigFlow()
+    flow.hass = MagicMock()
+    flow.hass.config.latitude = None
+    flow.hass.config.longitude = None
+    flow._pending = [SERVICE_CWOP]
+    flow._services = {}
+    flow._owm_key = ""
+
+    result = await flow.async_step_credentials()
+    assert result["type"] == "form"
