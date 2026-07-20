@@ -309,6 +309,13 @@ decimal places locates a doorway; three (~100 m) is ample for
 meteorology. Round before entering unless you specifically want your
 exact position on a public map.
 
+For CWOP specifically, the status sensor's `last_payload` attribute
+contains the full APRS packet, including your coordinates, and that
+attribute is readable through Home Assistant's states API and templates.
+This is consistent with CWOP itself — the same packet is broadcast
+publicly to APRS-IS — but if you round your coordinates for the public
+map, note they appear at the same precision in the local attribute too.
+
 ## Sensor reference
 
 Every field is optional. The left column is the mapping key shown in the
@@ -422,10 +429,18 @@ above.
 - **`last_error`:** the status and truncated response body from the last
   failure, or `null`. WOW-BE distinguishes 403 (bad credentials), 422
   (validation, with the offending field named), and 429 (rate limited).
-- **`sensors_published`:** how many fields went out last cycle.
-- **`last_payload`:** the normalized values sent. Sensor data only —
-  credentials are added inside each uploader after this dict is built,
-  so they never appear here, in the states API, or in a template.
+- **`sensors_published`:** how many weather measurements this network
+  sent last cycle. This is a consistent count across networks — it
+  reflects the mapped readings the network accepted, not the number of
+  fields in the request. CWOP, which packs everything into a single
+  APRS packet, reports the measurements in that packet, not `1`.
+- **`last_payload`:** the fields this network actually sent — its own
+  provider-specific field names and values, which are a subset of the
+  mapped readings and differ per network (CWOP sends a single packet;
+  WOW-BE sends many named fields). Sensor data only: credential fields
+  are stripped, so they never appear here, in the states API, or in a
+  template, even for a provider that builds its password into the
+  request.
 
 ### One for source data health
 

@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-20
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Fixed
+
+- One sensor with an unrecognized unit no longer takes the whole
+  integration down. Home Assistant's unit converters raise
+  `HomeAssistantError` (whose class hierarchy is only `Exception`, not
+  `ValueError`), which the converter's error handling did not catch, so
+  the exception propagated out of the coordinator refresh and failed
+  every update, for all networks, on every tick. The unrecognized unit
+  now drops just that field with a warning.
+- `rain_rate` used a length converter (mm) instead of an intensity one.
+  Rain rate is mm/h (or in/h) -- a volumetric-flux/speed unit -- so a
+  correctly declared rain-rate sensor hit the unrecognized-unit path and
+  (via the bug above) took the integration down. It now uses the speed
+  converter with mm/h.
+- A sensor mapped during initial setup could not be unmapped from the
+  options flow. The mapping lived in the config entry data, the options
+  form wrote only non-empty keys, and the two were merged, so a cleared
+  field fell back to its original value. Once the settings form is
+  saved, its mapping is now authoritative, so clearing a field removes
+  it.
+- CWOP no longer asks for an authentication key. It uses the fixed
+  public passcode -1 and never reads a key, so the field forced users to
+  invent an unused value.
+- CWOP is now skipped with a warning, rather than reporting from (0, 0),
+  when a config entry has no coordinates -- which a pre-coordinate entry
+  surviving an upgrade could otherwise trigger silently.
+- `last_payload` now records the payload actually sent during the
+  upload, rather than rebuilding it afterward (which recomputed
+  timestamps and, for CWOP, the packet, so the attribute differed
+  slightly from what went on the wire).
+- The upload key is redacted from `last_error`, in case an error string
+  (for example an invalid-URL error) embeds a URL carrying the key as a
+  query parameter, since `last_error` is exposed as an entity attribute.
+- The credentials step no longer claims all credentials are sent "over
+  TLS." That is true for the HTTP networks but false for CWOP, which
+  carries no secret and connects over plaintext APRS-IS.
+- Removed a duplicate `_credentials_done` definition in the shared
+  credential-steps mixin, where the second silently shadowed an abstract
+  guard.
+- The per-network upload status sensor's `last_payload` and
+  `sensors_published` attributes now show what that network actually
+  sent -- its own provider-specific field subset -- rather than the full
+  set of mapped readings shared across every network. CWOP's status
+  sensor, for example, now shows its single packet field instead of all
+  mapped sensors. As part of this, `build_payload()` strips any
+  credential field before exposing it, so a provider that builds its
+  password into the request params (WOW-BE) cannot leak it into the
+  states API.
+
+- The `sensors_published` count on the status sensor now reports the
+  number of weather measurements a network sent, counted consistently
+  across networks, rather than the number of fields in the request.
+  CWOP previously showed `1` because it packs every measurement into a
+  single APRS packet; it now reports the measurements in that packet.
+  Each uploader declares its accepted readings (`SUPPORTED_READINGS`),
+  so the figure excludes request metadata such as timestamps and
+  station identifiers.
+
+### Changed
+
+- `DeviceInfo` now uses the `DeviceEntryType.SERVICE` enum instead of
+  the deprecated string form, and the coordinator is stored on
+  `entry.runtime_data` rather than `hass.data`, following current Home
+  Assistant patterns.
+
 ## [0.5.0] - 2026-07-19
 
 Pre-1.0: the configuration schema and entity IDs may still change before
@@ -408,7 +478,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.2.0...v0.3.0

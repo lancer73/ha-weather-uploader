@@ -133,10 +133,60 @@ APRS over TCP. Windy is GET-with-query.
 
 ## Invariants — do not break these
 
-1. **Credentials never enter the payload dict.** `build_params()` may
-   add them, but the dict the coordinator passes around and exposes via
-   the `last_payload` attribute must contain sensor values only. Entity
-   attributes are visible in the states API, templates, and diagnostics.
+- **Catch `HomeAssistantError` around unit conversion.** HA's converters
+  raise `HomeAssistantError` (MRO: only `Exception`), not `ValueError`.
+  `_convert` must catch it, or one sensor with an odd unit fails the
+  whole coordinator refresh every tick. Match each field to the right
+  converter: accumulations (`rain_hourly`, `rain_24h`) are distance/mm;
+  intensity (`rain_rate`) is speed/`mm/h`.
+- **Options is authoritative for the mapping once saved.** The mapping
+  lives in entry data at setup and in entry options after the settings
+  form is saved. Resolve it from options-if-present, not a
+  `{**data, **options}` union -- the union cannot express unmapping a
+  sensor (a cleared key falls back to data). Networks/credentials always
+  come from data.
+- **CWOP needs coordinates and no key.** It uses passcode -1 (no key)
+  and must have lat/lon; `build_uploader` returns None (skips it) rather
+  than defaulting to (0, 0) if coordinates are missing.
+- **`last_error` and `last_payload` are exposed as entity attributes.**
+  Both are credential-redacted (`last_error` via the setter, payloads
+  via `_redact_payload`). `last_payload` records what `send` actually
+  transmitted, not a rebuild.
+
+
+0. **`SUPPORTED_READINGS` must match what `build_params` consumes.**
+   Each uploader declares the normalized reading keys it accepts; the
+   status sensor's `sensors_published` counts those present in the
+   cycle's data, so the figure means the same thing for every network
+   (CWOP's single packet reports its measurements, not `1`). If you add
+   or drop a `conv(data, "<key>")` in a `build_params`, update that
+   uploader's `SUPPORTED_READINGS` to match. A test
+   (`test_measurement_count_matches_supported_readings_consumed`)
+   enforces that every declared key actually affects the payload, but it
+   cannot catch a consumed key you forgot to declare.
+
+0. **`SUPPORTED_READINGS` must match what `build_params` consumes.**
+   Each uploader declares the normalized reading keys it accepts; the
+   status sensor's `sensors_published` counts those present in the
+   cycle's data, so the figure means the same thing for every network
+   (CWOP's single packet reports its measurements, not `1`). If you add
+   or drop a `conv(data, "<key>")` in a `build_params`, update that
+   uploader's `SUPPORTED_READINGS` to match. A test
+   (`test_measurement_count_matches_supported_readings_consumed`)
+   enforces that every declared key actually affects the payload, but it
+   cannot catch a consumed key you forgot to declare.
+
+
+1. **Credentials never enter the exposed payload.** `build_params()` may
+   add them (WOW-BE builds `PASSWORD` straight into its params), but the
+   status entity exposes `build_payload()`, which strips any credential
+   field (`_CREDENTIAL_FIELDS` in `base.py`) so a secret cannot surface
+   in the states API, templates, or diagnostics. The status attribute
+   shows each network's OWN payload (per-network `payloads` map in the
+   coordinator), not the shared reading set -- these are different, and
+   showing the shared set misreports what a network sent. If you add a
+   provider whose credential uses a new field name, add it to
+   `_CREDENTIAL_FIELDS`.
 2. **Never log request parameters.** Several providers carry the
    credential in the query string (Windy's v2 API requires the
    `PASSWORD` query param; the WU-derived ones use a query key). Log
@@ -379,7 +429,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.5.0**. Semantic Versioning 2.0.0.
+Current release: **0.6.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 
