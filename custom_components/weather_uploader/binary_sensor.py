@@ -10,7 +10,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -32,7 +32,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up one status entity per network, plus a data health entity."""
-    coordinator: UploadCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: UploadCoordinator = entry.runtime_data
 
     entities: list[BinarySensorEntity] = [
         UploadStatusEntity(coordinator, uploader.name)
@@ -57,7 +57,7 @@ class _BaseEntity(CoordinatorEntity[UploadCoordinator], BinarySensorEntity):
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
             name="Weather Network Uploader",
             manufacturer="lancer73",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
 
@@ -92,17 +92,21 @@ class UploadStatusEntity(_BaseEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the last error and the payload that was sent.
+        """Expose the last error and the payload sent to this network.
 
-        The payload holds sensor values only. Credentials are added
-        inside each uploader after this dict is built, so they cannot
-        surface here, in the states API, or in a template.
+        The payload is this network's own field set -- what it actually
+        transmits, which is a subset of the mapped readings and differs
+        per network (CWOP sends a handful of fields, WOW-BE many more).
+        It holds sensor values only; credentials are added inside each
+        uploader after this payload is built, so they cannot surface
+        here, in the states API, or in a template.
         """
         data = self.coordinator.data or {}
-        payload = data.get("data", {})
+        payload = data.get("payloads", {}).get(self._service_name, {})
+        count = data.get("counts", {}).get(self._service_name, 0)
         return {
             ATTR_LAST_ERROR: data.get("errors", {}).get(self._service_name),
-            ATTR_SENSOR_COUNT: len(payload),
+            ATTR_SENSOR_COUNT: count,
             ATTR_LAST_PAYLOAD: payload,
         }
 

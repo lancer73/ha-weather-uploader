@@ -33,6 +33,7 @@ from .const import (
     GEO_SERVICES,
     MIN_INTERVAL,
     SENSOR_KEYS,
+    SERVICE_CWOP,
     SERVICE_OPENWEATHERMAP,
     SERVICES,
 )
@@ -180,14 +181,6 @@ class _CredentialSteps:
         """
         raise NotImplementedError
 
-    async def _credentials_done(self) -> ConfigFlowResult:
-        """Continue after all pending credentials are collected.
-
-        Initial setup proceeds to sensor mapping. The options flow
-        overrides this to write the updated networks and reload.
-        """
-        return await self.async_step_sensors()
-
     async def async_step_credentials(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -208,10 +201,13 @@ class _CredentialSteps:
             self._pending.pop(0)
             return await self.async_step_credentials()
 
-        schema: dict[Any, Any] = {
-            vol.Required(CONF_STATION_ID): str,
-            vol.Required(CONF_KEY): _password_selector(),
-        }
+        # CWOP authenticates with the fixed passcode -1, not a user key,
+        # so it identifies by station id alone; requiring a key would
+        # force the user to invent an unused value. Every other network
+        # needs its key.
+        schema: dict[Any, Any] = {vol.Required(CONF_STATION_ID): str}
+        if service != SERVICE_CWOP:
+            schema[vol.Required(CONF_KEY)] = _password_selector()
 
         # CWOP needs the station coordinates on every packet. The config
         # flow asks for them only when such a network is selected, since

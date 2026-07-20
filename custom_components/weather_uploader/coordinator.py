@@ -16,8 +16,10 @@ from homeassistant.const import (
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
+    UnitOfVolumetricFlux,
 )
 from homeassistant.core import HomeAssistant, State
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import (
@@ -107,7 +109,7 @@ _CONVERSIONS: dict[str, tuple[Any, str]] = {
     "visibility": (DistanceConverter, UnitOfLength.KILOMETERS),
     "lightning_distance": (DistanceConverter, UnitOfLength.KILOMETERS),
     "cloud_base": (DistanceConverter, UnitOfLength.METERS),
-    "rain_rate": (DistanceConverter, UnitOfLength.MILLIMETERS),
+    "rain_rate": (SpeedConverter, UnitOfVolumetricFlux.MILLIMETERS_PER_HOUR),
     "rain_hourly": (DistanceConverter, UnitOfLength.MILLIMETERS),
     "rain_24h": (DistanceConverter, UnitOfLength.MILLIMETERS),
     "rain_daily": (DistanceConverter, UnitOfLength.MILLIMETERS),
@@ -143,12 +145,27 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # alias for readability in entities that reference it.
         self.entry = entry
         self.uploaders = uploaders
-        merged = {**entry.data, **entry.options}
+        # entry.data holds the initial mapping and settings AND the
+        # networks/credentials. entry.options, once the user saves the
+        # settings form, holds the mapping and settings only. A plain
+        # {**data, **options} union cannot express "unmap a sensor": a
+        # key cleared in the form is absent from options, so the union
+        # falls back to the value still in data. So once options has been
+        # saved, treat it as authoritative for the mapping and settings,
+        # while the networks always come from data.
+        if entry.options:
+            mapping_source = entry.options
+            settings_source = entry.options
+        else:
+            mapping_source = entry.data
+            settings_source = entry.data
         self._map: dict[str, str] = {
-            key: merged[key] for key in SENSOR_KEYS if merged.get(key)
+            key: mapping_source[key]
+            for key in SENSOR_KEYS
+            if mapping_source.get(key)
         }
         self.max_sensor_age = int(
-            merged.get(CONF_MAX_SENSOR_AGE, DEFAULT_MAX_SENSOR_AGE)
+            settings_source.get(CONF_MAX_SENSOR_AGE, DEFAULT_MAX_SENSOR_AGE)
         )
         self._warned: set[str] = set()
         # Populated by read_sensors() on every cycle, for diagnostics.
@@ -276,7 +293,13 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return value
         try:
             return converter.convert(value, unit, target)
-        except (ValueError, TypeError) as err:
+        except (ValueError, TypeError, HomeAssistantError) as err:
+            # HA's unit converters raise HomeAssistantError (e.g.
+            # UnitConversionError) for an unrecognized unit, and its MRO
+            # is only Exception -- not ValueError -- so it must be caught
+            # explicitly. Missing it would let one sensor with an
+            # unexpected unit fail the entire coordinator refresh every
+            # tick, for all networks, instead of dropping just that field.
             if key not in self._warned:
                 _LOGGER.warning(
                     "Cannot convert %s from %s to %s: %s", key, unit, target, err
@@ -316,11 +339,21 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         previous = self.data or {}
         results: dict[str, bool] = dict(previous.get("results", {}))
         errors: dict[str, str | None] = dict(previous.get("errors", {}))
+        payloads: dict[str, dict[str, Any]] = dict(previous.get("payloads", {}))
+        counts: dict[str, int] = dict(previous.get("counts", {}))
 
         for uploader, outcome in zip(due, outcomes, strict=True):
             # A failed attempt still consumed the provider's budget, so
             # throttle on attempt rather than on success.
             uploader.mark_sent()
+            # Record what this network actually sent -- the payload
+            # captured during send(), not a rebuild (which would recompute
+            # timestamps and differ from what went on the wire). Already
+            # credential-redacted by the uploader.
+            payloads[uploader.name] = uploader.last_payload
+            # And how many weather measurements that represents, counted
+            # consistently across networks (see measurement_count).
+            counts[uploader.name] = uploader.measurement_count(data)
             if isinstance(outcome, BaseException):
                 _LOGGER.error("%s raised unexpectedly: %s", uploader.name, outcome)
                 results[uploader.name] = False
@@ -329,7 +362,13 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 results[uploader.name] = outcome
                 errors[uploader.name] = uploader.last_error
 
-        return {"data": data, "results": results, "errors": errors}
+        return {
+            "data": data,
+            "results": results,
+            "errors": errors,
+            "payloads": payloads,
+            "counts": counts,
+        }
 
     def _carry_forward(self, data: dict[str, float]) -> dict[str, Any]:
         """Return prior statuses unchanged, with new sensor data."""
@@ -338,6 +377,8 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "data": data,
             "results": dict(previous.get("results", {})),
             "errors": dict(previous.get("errors", {})),
+            "payloads": dict(previous.get("payloads", {})),
+            "counts": dict(previous.get("counts", {})),
         }
 
     @property
