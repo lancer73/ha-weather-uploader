@@ -127,3 +127,35 @@ def test_owm_mode_selector_builds():
             mode=selector.SelectSelectorMode.LIST,
         )
     )
+
+
+# --- No duplicate method definitions -------------------------------------
+
+# ruff's F811 (redefinition) does not reliably flag a method defined twice
+# in a class body that also has annotation-only attributes (e.g.
+# `hass: Any`) -- it silently stopped flagging a duplicate
+# `_credentials_done`, where the second definition shadowed the first.
+# This AST check does not depend on ruff's scope analysis.
+
+
+def test_no_duplicate_methods_in_config_flow():
+    """No class in config_flow.py may define the same method twice."""
+    import ast
+    from pathlib import Path
+
+    source = Path("custom_components/weather_uploader/config_flow.py").read_text()
+    tree = ast.parse(source)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for item in node.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if item.name in seen:
+                    duplicates.add(item.name)
+                seen.add(item.name)
+        assert not duplicates, (
+            f"{node.name} defines duplicate method(s): {sorted(duplicates)}"
+        )
