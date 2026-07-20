@@ -25,8 +25,8 @@
         "data_description": {
           "station_id": "For WOW-BE this is the site ID from your registration email; the short form or the long UUID both work. For CWOP it is your callsign, e.g. EW9876. For Windy it is the station number.",
           "key": "The authentication key issued or chosen at registration. Any value is accepted; no length or format is enforced.",
-          "latitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
-          "longitude": "Decimal degrees. Round to ~3 decimals (about 100 m) unless you want your exact location published.",
+          "latitude": "Decimal degrees. Pre-filled from your Home Assistant location, rounded to ~3 decimals (about 100 m). Enter a more precise value only if you want your exact location published.",
+          "longitude": "Decimal degrees. Pre-filled from your Home Assistant location, rounded to ~3 decimals (about 100 m). Enter a more precise value only if you want your exact location published.",
           "altitude": "Station ground elevation in metres above sea level."
         }
       },
