@@ -15,7 +15,7 @@ from .uploaders import BaseUploader, build_uploader
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 def _build_uploaders(hass: HomeAssistant, entry: ConfigEntry) -> list[BaseUploader]:

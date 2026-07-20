@@ -213,6 +213,7 @@ CONF_MAX_SENSOR_AGE: Final = "max_sensor_age"
 
 ATTR_LAST_PAYLOAD: Final = "last_payload"
 ATTR_LAST_ERROR: Final = "last_error"
+ATTR_LAST_ERROR_TIME: Final = "last_error_time"
 ATTR_LAST_SUCCESS: Final = "last_success"
 ATTR_STALE_SENSORS: Final = "stale_sensors"
 ATTR_MISSING_SENSORS: Final = "missing_sensors"

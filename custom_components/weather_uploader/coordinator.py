@@ -160,9 +160,7 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mapping_source = entry.data
             settings_source = entry.data
         self._map: dict[str, str] = {
-            key: mapping_source[key]
-            for key in SENSOR_KEYS
-            if mapping_source.get(key)
+            key: mapping_source[key] for key in SENSOR_KEYS if mapping_source.get(key)
         }
         self.max_sensor_age = int(
             settings_source.get(CONF_MAX_SENSOR_AGE, DEFAULT_MAX_SENSOR_AGE)
@@ -341,6 +339,8 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         errors: dict[str, str | None] = dict(previous.get("errors", {}))
         payloads: dict[str, dict[str, Any]] = dict(previous.get("payloads", {}))
         counts: dict[str, int] = dict(previous.get("counts", {}))
+        error_codes: dict[str, str | None] = dict(previous.get("error_codes", {}))
+        error_times: dict[str, Any] = dict(previous.get("error_times", {}))
 
         for uploader, outcome in zip(due, outcomes, strict=True):
             # A failed attempt still consumed the provider's budget, so
@@ -354,6 +354,8 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # And how many weather measurements that represents, counted
             # consistently across networks (see measurement_count).
             counts[uploader.name] = uploader.measurement_count(data)
+            error_codes[uploader.name] = uploader.last_error_code
+            error_times[uploader.name] = uploader.last_error_time
             if isinstance(outcome, BaseException):
                 _LOGGER.error("%s raised unexpectedly: %s", uploader.name, outcome)
                 results[uploader.name] = False
@@ -368,6 +370,8 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "errors": errors,
             "payloads": payloads,
             "counts": counts,
+            "error_codes": error_codes,
+            "error_times": error_times,
         }
 
     def _carry_forward(self, data: dict[str, float]) -> dict[str, Any]:
@@ -379,6 +383,8 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "errors": dict(previous.get("errors", {})),
             "payloads": dict(previous.get("payloads", {})),
             "counts": dict(previous.get("counts", {})),
+            "error_codes": dict(previous.get("error_codes", {})),
+            "error_times": dict(previous.get("error_times", {})),
         }
 
     @property

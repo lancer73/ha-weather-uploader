@@ -211,10 +211,25 @@ class _CredentialSteps:
 
         # CWOP needs the station coordinates on every packet. The config
         # flow asks for them only when such a network is selected, since
-        # precise home coordinates are sensitive.
+        # precise home coordinates are sensitive. Pre-fill from Home
+        # Assistant's own location so the user need not look them up, but
+        # round to ~3 decimals (~100 m): CWOP broadcasts these publicly to
+        # APRS-IS, so the default should not publish the exact dwelling.
+        # The user can still enter more precise values.
         if service in GEO_SERVICES:
-            schema[vol.Required(CONF_LATITUDE)] = _coordinate_selector(-90, 90)
-            schema[vol.Required(CONF_LONGITUDE)] = _coordinate_selector(-180, 180)
+            config = self.hass.config
+            lat_default = (
+                round(config.latitude, 3) if config.latitude is not None else None
+            )
+            lon_default = (
+                round(config.longitude, 3) if config.longitude is not None else None
+            )
+            schema[vol.Required(CONF_LATITUDE, default=lat_default)] = (
+                _coordinate_selector(-90, 90)
+            )
+            schema[vol.Required(CONF_LONGITUDE, default=lon_default)] = (
+                _coordinate_selector(-180, 180)
+            )
 
         return self.async_show_form(
             step_id="credentials",
