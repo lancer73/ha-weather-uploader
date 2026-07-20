@@ -14,7 +14,7 @@
       },
       "credentials": {
         "title": "Credentials for {service}",
-        "description": "Enter the station identifier and authentication key issued by {service}. These are stored in cleartext in Home Assistant's .storage directory and are transmitted to the provider over TLS.",
+        "description": "Enter the station identifier and, where the network uses one, the authentication key issued by {service}. Credentials are stored in cleartext in Home Assistant's .storage directory. For the HTTP networks they are sent to the provider over HTTPS; CWOP is an exception -- it uses a fixed public passcode, carries no secret, and connects over plaintext APRS-IS.",
         "data": {
           "station_id": "Station ID",
           "key": "Authentication key",
