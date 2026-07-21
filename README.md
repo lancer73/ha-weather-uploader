@@ -217,6 +217,14 @@ firing at once and risking a rate-limit rejection. The cost is that the
 first upload after a restart is delayed by up to that minimum, which is
 harmless; a 429 is not.
 
+Within a cycle, the networks are uploaded a few seconds apart rather
+than all at once, so they do not all resolve DNS and open connections
+simultaneously — a burst that can cause DNS timeouts on a constrained
+resolver. Shortest-period networks go first, so the spacing does not
+shorten their effective interval. A network whose upload fails is left
+until its next scheduled cycle rather than retried, which keeps each
+network's send cadence fixed.
+
 | Network | Minimum send interval | Source |
 | --- | --- | --- |
 | WOW-BE | 60 s | RMI recommendation; 20/min/site limit |
@@ -435,10 +443,12 @@ a durable, graphable trail instead of only showing in an attribute you
 have to catch in the act.
 
 - **State:** a short, stable code — `ok` when the last upload succeeded,
-  otherwise the failure kind: `timeout`, `dns`, `connection`,
-  `connection_refused`, `connection_reset`, `tls`, `client_error`, or
-  `http_<status>` (e.g. `http_429`, `http_500`). The codes are
-  low-cardinality on purpose, so they graph and count cleanly.
+  otherwise the failure kind: `timeout` (whole-request), `connect_timeout`
+  (DNS resolution or TCP handshake stalled), `read_timeout` (connected,
+  but the response was too slow), `dns` (name did not resolve),
+  `connection`, `connection_refused`, `connection_reset`, `tls`,
+  `client_error`, or `http_<status>` (e.g. `http_429`, `http_500`). The
+  codes are low-cardinality on purpose, so they graph and count cleanly.
 - **`last_error`:** the full, credential-redacted message.
 - **`last_error_time`:** when the most recent error occurred (ISO 8601).
   This is left in place after a later success, so the state returns to

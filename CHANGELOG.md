@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-20
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Added
+
+- Connection-phase timeouts are now distinguished from server-response
+  timeouts. HTTP requests set a separate connect timeout, so a DNS
+  resolution or TCP-handshake stall is reported as `connect_timeout`
+  (CWOP reports its own connect timeout the same way), while a slow
+  response after connecting is `read_timeout`. Previously both collapsed
+  into a single `timeout` code. DNS resolution *failures* remain `dns`.
+
+### Changed
+
+- Uploads to the different networks are now staggered a few seconds
+  apart instead of all firing at once, shortest-period networks first.
+  Concurrent dispatch made every network resolve DNS and open a
+  connection simultaneously, which on a constrained resolver could cause
+  DNS timeouts -- adding CWOP made this worse, because it does an
+  uncached name lookup on a raw socket every time, unlike the shared
+  keep-alive HTTP session. Networks are ordered by ascending minimum
+  send interval so the stagger's offset falls on the long-period
+  networks, which have slack to absorb it; a tight-interval network
+  (e.g. 60 s) would otherwise risk its next-cycle send landing just
+  under its own floor. The spacing stays well within the minimum poll
+  interval, and Home Assistant already skips a scheduled refresh if the
+  previous one is still running, so a long cycle cannot pile up. A network
+  whose send fails (for example a transient DNS timeout) is simply left
+  until its next scheduled cycle rather than retried, which keeps every
+  network's send cadence fixed.
+
 ## [0.7.0] - 2026-07-20
 
 Pre-1.0: the configuration schema and entity IDs may still change before
@@ -511,7 +544,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.4.0...v0.5.0

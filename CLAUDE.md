@@ -134,6 +134,26 @@ APRS over TCP. Windy is GET-with-query.
 
 ## Invariants — do not break these
 
+- **Uploads are staggered shortest-period-first, not concurrent.** The
+  coordinator sorts the due networks by ascending `min_interval`, then
+  dispatches sequentially, sleeping `UPLOAD_STAGGER_SECONDS` between them
+  (N-1 gaps, no trailing sleep), so they do not all resolve DNS at once.
+  The sort must stay keyed only on `min_interval` (stable, so a network
+  keeps the same slot each cycle and its send-to-send gap stays at its
+  full interval); ordering long-period networks first would push a
+  tight-interval network's next send under its own floor. Keep the total
+  (stagger + timeouts) safely under the minimum poll
+  interval; HA skips overlapping refreshes, but a chronically long cycle
+  means missed ticks.
+- **Timeout codes are phase-specific.** The HTTP `ClientTimeout` sets
+  `sock_connect` separately from `total` so a connection-phase stall
+  raises `ConnectionTimeoutError` -> `connect_timeout` (the closest
+  aiohttp gets to a DNS timeout), distinct from `read_timeout` and the
+  whole-request `timeout`. `classify_client_error` must check
+  `ConnectionTimeoutError`/`SocketTimeoutError` before their shared
+  `ServerTimeoutError` parent, or both collapse to `timeout`.
+
+
 - **Catch `HomeAssistantError` around unit conversion.** HA's converters
   raise `HomeAssistantError` (MRO: only `Exception`), not `ValueError`.
   `_convert` must catch it, or one sensor with an odd unit fails the
@@ -430,7 +450,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.7.0**. Semantic Versioning 2.0.0.
+Current release: **0.8.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 
