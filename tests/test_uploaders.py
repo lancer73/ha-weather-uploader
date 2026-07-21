@@ -444,3 +444,35 @@ def test_geo_services_need_coordinates():
     assert SERVICE_CWOP in GEO_SERVICES
     assert SERVICE_WOW_BE not in GEO_SERVICES
     assert SERVICE_WINDY not in GEO_SERVICES
+
+
+async def test_cwop_connect_uses_happy_eyeballs():
+    """CWOP races candidate addresses so one dead pool server does not stall.
+
+    cwop.aprs.net is a rotating pool of several IPv4 addresses; without
+    Happy Eyeballs a single
+    slow or dead address would block the connect for the full timeout.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from custom_components.weather_uploader.uploaders.cwop import (
+        HAPPY_EYEBALLS_DELAY,
+        CwopUploader,
+    )
+
+    up = CwopUploader(None, "EW1234", min_interval=0, latitude=51.1, longitude=4.5)
+    captured: dict = {}
+
+    async def fake_open(host, port, **kwargs):
+        captured.update(kwargs)
+        reader = MagicMock()
+        reader.readline = AsyncMock(return_value=b"# banner\r\n")
+        writer = MagicMock()
+        writer.drain = AsyncMock()
+        writer.wait_closed = AsyncMock()
+        return reader, writer
+
+    with patch("asyncio.open_connection", fake_open):
+        await up.send({"temperature": 18.0})
+
+    assert captured.get("happy_eyeballs_delay") == HAPPY_EYEBALLS_DELAY
