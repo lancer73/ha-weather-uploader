@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -39,6 +39,15 @@ from .const import (
 from .uploaders import BaseUploader
 
 _LOGGER = logging.getLogger(__name__)
+
+# Seconds to wait between one network's upload and the next. The uploads
+# used to fire concurrently, which made every network resolve DNS and
+# connect at the same instant; on a constrained resolver that burst can
+# cause DNS timeouts (CWOP makes it worse -- it does an uncached lookup
+# on a raw socket every time, unlike the shared, keep-alive HTTP
+# session). Spacing them out keeps well within the 60 s minimum poll
+# interval even with every network enabled.
+UPLOAD_STAGGER_SECONDS: Final = 5
 
 _INVALID_STATES = {STATE_UNKNOWN, STATE_UNAVAILABLE, "", "none", "None"}
 
@@ -329,10 +338,31 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("No network due this tick")
             return self._carry_forward(data)
 
-        outcomes = await asyncio.gather(
-            *(uploader.send(data) for uploader in due),
-            return_exceptions=True,
-        )
+        # Upload the shortest-period networks first. The stagger delays
+        # each successive network by UPLOAD_STAGGER_SECONDS, which shifts
+        # its actual send time later within the cycle. A network with a
+        # tight minimum interval (e.g. 60 s) has little slack, so if it
+        # were sent late its next-cycle send could fall just under its
+        # own floor; a long-period network (e.g. 300 s) has ample slack
+        # to absorb the offset. Ordering by ascending minimum interval
+        # gives the least slack to the networks that can spare it most.
+        due.sort(key=lambda uploader: uploader.min_interval)
+
+        # Send to each due network in turn, spaced by UPLOAD_STAGGER_SECONDS,
+        # rather than all at once. Concurrent dispatch made every network
+        # resolve DNS and connect simultaneously, which could overwhelm a
+        # constrained resolver and cause DNS timeouts. Sequential order is
+        # preserved so outcomes line up with `due` below.
+        outcomes: list[bool | BaseException] = []
+        for index, uploader in enumerate(due):
+            if index > 0:
+                await asyncio.sleep(UPLOAD_STAGGER_SECONDS)
+            try:
+                outcomes.append(await uploader.send(data))
+            except BaseException as err:
+                # Mirror gather(return_exceptions=True): capture, don't
+                # let one network's crash abort the rest of the cycle.
+                outcomes.append(err)
 
         previous = self.data or {}
         results: dict[str, bool] = dict(previous.get("results", {}))
