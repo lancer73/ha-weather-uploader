@@ -100,6 +100,18 @@ SOFTWARE_VERSION = "1.0"
 CONNECT_TIMEOUT = 15
 IO_TIMEOUT = 15
 
+# cwop.aprs.net is a rotating pool of volunteer-run servers -- it
+# resolves to several IPv4 addresses (six at the time of writing; no
+# IPv6). Each connect does a fresh, uncached lookup, and plain
+# open_connection tries the returned addresses one at a time, so landing
+# on an overloaded or dead server in the pool stalls the whole connect
+# until CONNECT_TIMEOUT. Happy Eyeballs races the addresses instead: if
+# the first has not connected within this many seconds, the next is
+# tried in parallel, so one slow server is bypassed in a fraction of a
+# second rather than stalling for 15 s. (interleave is not set: it only
+# reorders across address families, and the pool is IPv4-only.)
+HAPPY_EYEBALLS_DELAY = 0.25
+
 
 def format_latitude(value: float) -> str:
     """Return APRS ``ddmm.hhN`` latitude. Leading zeros are required."""
@@ -275,7 +287,11 @@ class CwopUploader(BaseUploader):
         try:
             try:
                 reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.host, self.port),
+                    asyncio.open_connection(
+                        self.host,
+                        self.port,
+                        happy_eyeballs_delay=HAPPY_EYEBALLS_DELAY,
+                    ),
                     timeout=CONNECT_TIMEOUT,
                 )
             except TimeoutError:
