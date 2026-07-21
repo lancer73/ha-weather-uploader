@@ -273,10 +273,19 @@ class CwopUploader(BaseUploader):
 
         writer: asyncio.StreamWriter | None = None
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.port),
-                timeout=CONNECT_TIMEOUT,
-            )
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(self.host, self.port),
+                    timeout=CONNECT_TIMEOUT,
+                )
+            except TimeoutError:
+                # The connection phase (DNS resolution + TCP handshake)
+                # timed out. Coded distinctly so it reads clearly and is
+                # eligible for the one-shot retry, like the HTTP
+                # networks' connect timeout.
+                self.record_error("connect_timeout", "connection timed out")
+                _LOGGER.warning("CWOP connection timed out")
+                return False
 
             # The server sends a banner first; it carries no meaning.
             await asyncio.wait_for(reader.readline(), timeout=IO_TIMEOUT)
@@ -295,7 +304,8 @@ class CwopUploader(BaseUploader):
             _LOGGER.debug("CWOP packet sent: %s", packet)
             return True
         except TimeoutError:
-            self.record_error("timeout", "timeout")
+            # A later read/write phase timed out (not the connection).
+            self.record_error("read_timeout", "timeout")
             _LOGGER.warning("CWOP upload timed out")
             return False
         except (OSError, UnicodeEncodeError) as err:

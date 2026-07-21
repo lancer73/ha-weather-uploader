@@ -13,7 +13,11 @@ from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
-TIMEOUT = aiohttp.ClientTimeout(total=30)
+# total bounds the whole request; sock_connect bounds the connection
+# phase (DNS resolution + TCP handshake) on its own, so a DNS hang
+# raises ConnectionTimeoutError -- distinguishable from a slow server
+# response (a read timeout) -- rather than eventually tripping the total.
+TIMEOUT = aiohttp.ClientTimeout(total=30, sock_connect=10)
 
 # Response bodies are truncated before logging. Never log request params:
 # they carry credentials for every provider except Windy.
@@ -157,6 +161,14 @@ class BaseUploader(ABC):
             if isinstance(os_err, socket.gaierror):
                 return "dns"
             return "connection"
+        # ConnectionTimeoutError and SocketTimeoutError are both
+        # subclasses of ServerTimeoutError, so they must be checked first.
+        # A connection-phase timeout covers DNS resolution and the TCP
+        # handshake -- the closest aiohttp gets to "DNS timed out."
+        if isinstance(err, aiohttp.ConnectionTimeoutError):
+            return "connect_timeout"
+        if isinstance(err, aiohttp.SocketTimeoutError):
+            return "read_timeout"
         if isinstance(err, aiohttp.ServerTimeoutError):
             return "timeout"
         if isinstance(err, aiohttp.ClientConnectionError):
