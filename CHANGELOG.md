@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-20
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Changed
+
+- CWOP connections now use Happy Eyeballs, racing the candidate
+  addresses instead of trying them one at a time. `cwop.aprs.net` is a
+  rotating pool of volunteer-run servers -- several IPv4 addresses -- so
+  an occasional connect would land on an overloaded or dead one and
+  stall for the full connect timeout; racing the addresses bypasses a
+  slow one in a fraction of a second. The connect timeout itself is
+  unchanged -- the issue was waiting serially on one address, not the
+  limit being too short.
+
 ## [0.8.0] - 2026-07-20
 
 Pre-1.0: the configuration schema and entity IDs may still change before
@@ -544,7 +560,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.5.0...v0.6.0

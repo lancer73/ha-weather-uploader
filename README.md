@@ -245,6 +245,12 @@ CWOP is not an HTTP API. It is APRS-IS: a TCP connection to
 integration speaks that protocol **natively** — no third-party bridge,
 no extra dependency.
 
+`cwop.aprs.net` is a rotating pool of volunteer-run servers, and each
+send does a fresh (uncached) lookup that may return several addresses.
+The connection uses Happy Eyeballs — it races those addresses in
+parallel — so if one server in the pool is overloaded or down, the
+connect moves on in a fraction of a second instead of stalling on it.
+
 ### Why not an HTTP bridge
 
 Public HTTP-to-APRS bridges exist, and other forwarders use them. This
