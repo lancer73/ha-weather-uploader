@@ -1,0 +1,166 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Weather Network Uploader",
+        "description": "Kies naar welke weerdiensten je wilt publiceren en hoe vaak. Elke weerdienst heeft een eigen snelheidslimiet, dus je kunt een kort peilinterval kiezen zonder tragere diensten te overbelasten.",
+        "data": {
+          "services": "Weerdiensten",
+          "interval": "Peilinterval van de sensoren"
+        },
+        "data_description": {
+          "interval": "Hoe vaak je sensoren worden uitgelezen, in seconden. Elke weerdienst wordt afzonderlijk afgeremd om zijn eigen snelheidslimiet te respecteren, dus een lage waarde hier overbelast tragere diensten niet. 60 komt overeen met de aanbeveling van het KMI voor WOW-BE."
+        }
+      },
+      "credentials": {
+        "title": "Inloggegevens voor {service}",
+        "description": "Voer de stationsaanduiding in en, als de weerdienst er een gebruikt, de authenticatiesleutel die je van {service} hebt gekregen. Inloggegevens worden onversleuteld opgeslagen in de map .storage van Home Assistant. Voor de HTTP-diensten worden ze via HTTPS naar de aanbieder verstuurd; CWOP is een uitzondering: het gebruikt een vaste openbare toegangscode, bevat geen geheim en verbindt via onversleuteld APRS-IS.",
+        "data": {
+          "station_id": "Stations-ID",
+          "key": "Authenticatiesleutel",
+          "latitude": "Breedtegraad",
+          "longitude": "Lengtegraad",
+          "altitude": "Hoogte"
+        },
+        "data_description": {
+          "station_id": "Voor WOW-BE is dit de site-ID uit je registratiemail; zowel de korte vorm als de lange UUID werkt. Voor CWOP is het je roepnaam, bijvoorbeeld EW9876. Voor Windy is het het stationsnummer.",
+          "key": "De authenticatiesleutel die bij de registratie is uitgegeven of gekozen. Elke waarde wordt aanvaard; er wordt geen lengte of formaat afgedwongen.",
+          "latitude": "Decimale graden. Vooraf ingevuld vanuit je Home Assistant-locatie, afgerond op ~3 decimalen (ongeveer 100 m). Voer alleen een preciezere waarde in als je wilt dat je exacte locatie wordt gepubliceerd.",
+          "longitude": "Decimale graden. Vooraf ingevuld vanuit je Home Assistant-locatie, afgerond op ~3 decimalen (ongeveer 100 m). Voer alleen een preciezere waarde in als je wilt dat je exacte locatie wordt gepubliceerd.",
+          "altitude": "Hoogte van het maaiveld bij het station, in meters boven zeeniveau."
+        }
+      },
+      "sensors": {
+        "title": "Je sensoren koppelen",
+        "description": "Selecteer de Home Assistant-entiteit voor elk veld dat je wilt publiceren. Laat een veld leeg om het weg te laten. Eenheden worden automatisch omgerekend vanuit de eenheid die elke entiteit opgeeft. Let op: rain_rate moet een sensor voor de momentane intensiteit zijn, niet een uursom. Metingen die buiten een zinnig bereik voor een veld vallen (bijvoorbeeld een luchtdruk die eerder in pascal dan in hPa lijkt te staan) worden tijdens het uitvoeren weggelaten en gemeld op de sensor 'Probleem met brongegevens'."
+      },
+      "confirm_mapping": {
+        "title": "Sensorkoppeling controleren",
+        "description": "Sommige koppelingen zien er ongebruikelijk uit. Je kunt gewoon doorgaan \u2014 dit zijn waarschuwingen, geen fouten, en ze zijn vaak prima voor zelfbouw- of aangepaste sensoren.\n\n{warnings}\n\nKies Verzenden om de koppeling zo op te slaan, of ga terug om ze aan te passen."
+      },
+      "owm_station": {
+        "title": "OpenWeatherMap instellen",
+        "description": "OpenWeatherMap-stations worden via de API aangemaakt \u2014 er is geen aanmelding via de website, en de stations-ID die je voor uploads nodig hebt bestaat pas zodra er een station is aangemaakt.\n\nVoer je OpenWeatherMap API-sleutel in en kies vervolgens of je nu een nieuw station aanmaakt of de interne ID van een bestaand station gebruikt.",
+        "data": {
+          "key": "API-sleutel",
+          "mode": "Station"
+        },
+        "data_description": {
+          "key": "Je OpenWeatherMap API-sleutel (van het tabblad API keys in je account).",
+          "mode": "Maak een nieuw station aan, of voer een bestaande interne stations-ID in."
+        }
+      },
+      "owm_create": {
+        "title": "OpenWeatherMap-station aanmaken",
+        "description": "Hiermee wordt een nieuw station op je OpenWeatherMap-account geregistreerd en de interne ID die daarbij wordt teruggegeven opgeslagen. De locatie is vooraf ingevuld vanuit je Home Assistant-instellingen \u2014 pas ze aan als je liever een afgeronde of andere locatie publiceert. Als er al een station met dezelfde aanduiding bestaat, wordt dat hergebruikt in plaats van gedupliceerd.",
+        "data": {
+          "external_id": "Stationsaanduiding",
+          "name": "Stationsnaam",
+          "latitude": "Breedtegraad",
+          "longitude": "Lengtegraad",
+          "altitude": "Hoogte"
+        },
+        "data_description": {
+          "external_id": "Een korte aanduiding naar keuze (letters, cijfers, liggende streepjes). Niet de interne ID \u2014 die genereert OpenWeatherMap zelf.",
+          "name": "Vooraf ingevuld vanuit de naam van je Home Assistant-locatie. Een weergavenaam voor het station op OpenWeatherMap.",
+          "latitude": "Vooraf ingevuld vanuit Home Assistant. Rond af op ~3 decimalen (ongeveer 100 m) als je niet wilt dat je exacte locatie wordt gepubliceerd.",
+          "longitude": "Vooraf ingevuld vanuit Home Assistant. Rond af op ~3 decimalen (ongeveer 100 m) als je niet wilt dat je exacte locatie wordt gepubliceerd.",
+          "altitude": "Vooraf ingevuld vanuit je Home Assistant-hoogte. Hoogte van het maaiveld bij het station, in meters."
+        }
+      },
+      "owm_existing": {
+        "title": "Bestaand OpenWeatherMap-station",
+        "description": "Voer de interne stations-ID in (een lange hexadecimale tekenreeks zoals 583436dd9643a9000196b8d6). Je vindt die in het API-antwoord van het moment waarop het station werd aangemaakt, of door je stations via de API op te vragen.",
+        "data": {
+          "station_id": "Interne stations-ID"
+        },
+        "data_description": {
+          "station_id": "De interne ID die OpenWeatherMap voor het station heeft gegenereerd \u2014 niet de aanduiding die je zelf hebt gekozen."
+        }
+      }
+    },
+    "error": {
+      "unknown": "Onverwachte fout.",
+      "invalid_auth": "OpenWeatherMap heeft de API-sleutel geweigerd. Controleer ze en probeer opnieuw.",
+      "cannot_connect": "Kan OpenWeatherMap niet bereiken. Controleer je verbinding en probeer opnieuw.",
+      "cannot_create": "OpenWeatherMap kon het station niet aanmaken. Het antwoord staat in het logboek."
+    },
+    "abort": {
+      "already_configured": "Deze uploader is al geconfigureerd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Weather Network Uploader",
+        "menu_options": {
+          "settings": "Sensorkoppeling en intervallen bewerken",
+          "add_network": "Een weerdienst toevoegen",
+          "remove_network": "Een weerdienst verwijderen"
+        }
+      },
+      "confirm_mapping": {
+        "title": "Sensorkoppeling controleren",
+        "description": "Sommige koppelingen zien er ongebruikelijk uit. Je kunt gewoon doorgaan \u2014 dit zijn waarschuwingen, geen fouten, en ze zijn vaak prima voor zelfbouw- of aangepaste sensoren.\n\n{warnings}\n\nKies Verzenden om de koppeling zo op te slaan, of ga terug om ze aan te passen."
+      },
+      "settings": {
+        "title": "Instellingen",
+        "description": "Pas het peilinterval, de vervaltijd van de sensoren en de sensorkoppeling aan. Om de inloggegevens van een weerdienst te wijzigen, verwijder je die en voeg je ze opnieuw toe.",
+        "data": {
+          "interval": "Peilinterval van de sensoren",
+          "max_sensor_age": "Vervaltijd"
+        },
+        "data_description": {
+          "interval": "Hoe vaak je sensoren worden uitgelezen, in seconden. Elke weerdienst wordt afzonderlijk afgeremd om zijn eigen snelheidslimiet te respecteren.",
+          "max_sensor_age": "Laat metingen weg waarvan de entiteit zo lang niets meer heeft doorgegeven. Dit volgt of je station nog gegevens verstuurt, niet of de waarde verandert, dus een regensensor die een droge week lang 0,0 aangeeft blijft gewoon meetellen. Zet op 0 om uit te schakelen (niet aanbevolen: van een station dat uitvalt zou dan de laatste meting voor altijd als actueel worden gepubliceerd)."
+        }
+      },
+      "add_network": {
+        "title": "Een weerdienst toevoegen",
+        "description": "Kies een of meer weerdiensten om toe te voegen. Op de volgende schermen voer je voor elke dienst de inloggegevens in.",
+        "data": {
+          "services": "Toe te voegen weerdiensten"
+        }
+      },
+      "remove_network": {
+        "title": "Een weerdienst verwijderen",
+        "description": "Kies een of meer weerdiensten om te verwijderen. Hun opgeslagen inloggegevens worden gewist en de uploads ernaartoe stoppen. Je sensorkoppeling blijft ongewijzigd.",
+        "data": {
+          "services": "Te verwijderen weerdiensten"
+        }
+      }
+    },
+    "abort": {
+      "all_networks_configured": "Elke ondersteunde weerdienst is al geconfigureerd.",
+      "no_networks_configured": "Er zijn geen weerdiensten om te verwijderen."
+    }
+  },
+  "selector": {
+    "services": {
+      "options": {
+        "wow_be": "WOW-BE - KMI/IRM (Belgi\u00eb)",
+        "wunderground": "Weather Underground",
+        "cwop": "CWOP / NOAA (levert aan MADIS + National Weather Service)",
+        "pwsweather": "PWSWeather",
+        "windy": "Windy",
+        "openweathermap": "OpenWeatherMap"
+      }
+    },
+    "owm_mode": {
+      "options": {
+        "create": "Een nieuw station aanmaken",
+        "existing": "Een bestaande stations-ID gebruiken"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "upload_status": {
+        "name": "Uploadstatus"
+      },
+      "source_data": {
+        "name": "Probleem met brongegevens"
+      }
+    }
+  }
+}

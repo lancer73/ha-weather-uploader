@@ -1,0 +1,166 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Weather Network Uploader",
+        "description": "Choisissez les r\u00e9seaux m\u00e9t\u00e9orologiques vers lesquels publier, et \u00e0 quelle fr\u00e9quence. Chaque r\u00e9seau est limit\u00e9 en d\u00e9bit s\u00e9par\u00e9ment : vous pouvez donc choisir un intervalle d'interrogation court sans surcharger les services les plus lents.",
+        "data": {
+          "services": "R\u00e9seaux m\u00e9t\u00e9orologiques",
+          "interval": "Intervalle d'interrogation des capteurs"
+        },
+        "data_description": {
+          "interval": "Fr\u00e9quence de lecture de vos capteurs, en secondes. Chaque r\u00e9seau est brid\u00e9 s\u00e9par\u00e9ment afin de respecter sa propre limite de d\u00e9bit : une valeur faible ici ne surchargera donc pas les services plus lents. 60 correspond \u00e0 la recommandation de l'IRM pour WOW-BE."
+        }
+      },
+      "credentials": {
+        "title": "Identifiants pour {service}",
+        "description": "Saisissez l'identifiant de station et, si le r\u00e9seau en utilise une, la cl\u00e9 d'authentification fournie par {service}. Les identifiants sont stock\u00e9s en clair dans le r\u00e9pertoire .storage de Home Assistant. Pour les r\u00e9seaux HTTP, ils sont transmis au fournisseur via HTTPS ; CWOP fait exception : il utilise un code d'acc\u00e8s public fixe, ne contient aucun secret et se connecte en APRS-IS non chiffr\u00e9.",
+        "data": {
+          "station_id": "ID de station",
+          "key": "Cl\u00e9 d'authentification",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "altitude": "Altitude"
+        },
+        "data_description": {
+          "station_id": "Pour WOW-BE, il s'agit de l'identifiant de site figurant dans votre courriel d'inscription ; la forme courte comme l'UUID long fonctionnent. Pour CWOP, c'est votre indicatif, par exemple EW9876. Pour Windy, c'est le num\u00e9ro de station.",
+          "key": "La cl\u00e9 d'authentification attribu\u00e9e ou choisie lors de l'inscription. Toute valeur est accept\u00e9e ; aucune longueur ni aucun format n'est impos\u00e9.",
+          "latitude": "Degr\u00e9s d\u00e9cimaux. Pr\u00e9rempli depuis la localisation de votre Home Assistant, arrondi \u00e0 ~3 d\u00e9cimales (environ 100 m). Ne saisissez une valeur plus pr\u00e9cise que si vous souhaitez que votre position exacte soit publi\u00e9e.",
+          "longitude": "Degr\u00e9s d\u00e9cimaux. Pr\u00e9rempli depuis la localisation de votre Home Assistant, arrondi \u00e0 ~3 d\u00e9cimales (environ 100 m). Ne saisissez une valeur plus pr\u00e9cise que si vous souhaitez que votre position exacte soit publi\u00e9e.",
+          "altitude": "Altitude du sol \u00e0 la station, en m\u00e8tres au-dessus du niveau de la mer."
+        }
+      },
+      "sensors": {
+        "title": "Associer vos capteurs",
+        "description": "S\u00e9lectionnez l'entit\u00e9 Home Assistant correspondant \u00e0 chaque champ que vous souhaitez publier. Laissez un champ vide pour l'omettre. Les unit\u00e9s sont converties automatiquement depuis l'unit\u00e9 d\u00e9clar\u00e9e par chaque entit\u00e9. Remarque : rain_rate doit \u00eatre un capteur d'intensit\u00e9 instantan\u00e9e, et non un cumul horaire. Les relev\u00e9s situ\u00e9s hors d'une plage plausible pour un champ (par exemple une pression exprim\u00e9e en pascals plut\u00f4t qu'en hPa) sont \u00e9cart\u00e9s \u00e0 l'ex\u00e9cution et signal\u00e9s sur le capteur \u00ab Probl\u00e8me de donn\u00e9es source \u00bb."
+      },
+      "confirm_mapping": {
+        "title": "V\u00e9rifier l'association des capteurs",
+        "description": "Certaines associations semblent inhabituelles. Vous pouvez malgr\u00e9 tout continuer \u2014 ce sont des avertissements, pas des erreurs, et ils sont souvent sans cons\u00e9quence pour des capteurs personnalis\u00e9s ou faits maison.\n\n{warnings}\n\nS\u00e9lectionnez Envoyer pour enregistrer l'association telle quelle, ou revenez en arri\u00e8re pour la modifier."
+      },
+      "owm_station": {
+        "title": "Configuration d'OpenWeatherMap",
+        "description": "Les stations OpenWeatherMap se cr\u00e9ent via son API \u2014 il n'y a pas d'inscription sur le site web, et l'ID de station n\u00e9cessaire aux envois n'existe qu'une fois la station cr\u00e9\u00e9e.\n\nSaisissez votre cl\u00e9 API OpenWeatherMap, puis choisissez de cr\u00e9er une nouvelle station ou d'utiliser l'ID interne d'une station existante.",
+        "data": {
+          "key": "Cl\u00e9 API",
+          "mode": "Station"
+        },
+        "data_description": {
+          "key": "Votre cl\u00e9 API OpenWeatherMap (onglet API keys de votre compte).",
+          "mode": "Cr\u00e9ez une nouvelle station, ou saisissez l'ID interne d'une station existante."
+        }
+      },
+      "owm_create": {
+        "title": "Cr\u00e9er une station OpenWeatherMap",
+        "description": "Cette \u00e9tape enregistre une nouvelle station sur votre compte OpenWeatherMap et conserve l'ID interne renvoy\u00e9. La localisation est pr\u00e9remplie depuis les param\u00e8tres de votre Home Assistant \u2014 ajustez-la si vous pr\u00e9f\u00e9rez publier une position arrondie ou diff\u00e9rente. Si une station portant le m\u00eame identifiant existe d\u00e9j\u00e0, elle est r\u00e9utilis\u00e9e plut\u00f4t que dupliqu\u00e9e.",
+        "data": {
+          "external_id": "Identifiant de station",
+          "name": "Nom de la station",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "altitude": "Altitude"
+        },
+        "data_description": {
+          "external_id": "Un libell\u00e9 court de votre choix (lettres, chiffres, tirets bas). Ce n'est pas l'ID interne \u2014 celui-ci est g\u00e9n\u00e9r\u00e9 par OpenWeatherMap.",
+          "name": "Pr\u00e9rempli depuis le nom de localisation de votre Home Assistant. Nom d'affichage de la station sur OpenWeatherMap.",
+          "latitude": "Pr\u00e9rempli depuis Home Assistant. Arrondissez \u00e0 ~3 d\u00e9cimales (environ 100 m) si vous ne souhaitez pas publier votre position exacte.",
+          "longitude": "Pr\u00e9rempli depuis Home Assistant. Arrondissez \u00e0 ~3 d\u00e9cimales (environ 100 m) si vous ne souhaitez pas publier votre position exacte.",
+          "altitude": "Pr\u00e9rempli depuis l'altitude de votre Home Assistant. Altitude du sol \u00e0 la station, en m\u00e8tres."
+        }
+      },
+      "owm_existing": {
+        "title": "Station OpenWeatherMap existante",
+        "description": "Saisissez l'ID interne de la station (une longue cha\u00eene hexad\u00e9cimale telle que 583436dd9643a9000196b8d6). Vous le trouverez dans la r\u00e9ponse de l'API au moment de la cr\u00e9ation de la station, ou en listant vos stations via l'API.",
+        "data": {
+          "station_id": "ID interne de station"
+        },
+        "data_description": {
+          "station_id": "L'ID interne g\u00e9n\u00e9r\u00e9 par OpenWeatherMap pour la station \u2014 et non le libell\u00e9 que vous avez choisi."
+        }
+      }
+    },
+    "error": {
+      "unknown": "Erreur inattendue.",
+      "invalid_auth": "OpenWeatherMap a refus\u00e9 la cl\u00e9 API. V\u00e9rifiez-la et r\u00e9essayez.",
+      "cannot_connect": "Impossible de joindre OpenWeatherMap. V\u00e9rifiez votre connexion et r\u00e9essayez.",
+      "cannot_create": "OpenWeatherMap n'a pas pu cr\u00e9er la station. Sa r\u00e9ponse figure dans le journal."
+    },
+    "abort": {
+      "already_configured": "Cet uploader est d\u00e9j\u00e0 configur\u00e9."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Weather Network Uploader",
+        "menu_options": {
+          "settings": "Modifier l'association des capteurs et les intervalles",
+          "add_network": "Ajouter un r\u00e9seau m\u00e9t\u00e9orologique",
+          "remove_network": "Supprimer un r\u00e9seau m\u00e9t\u00e9orologique"
+        }
+      },
+      "confirm_mapping": {
+        "title": "V\u00e9rifier l'association des capteurs",
+        "description": "Certaines associations semblent inhabituelles. Vous pouvez malgr\u00e9 tout continuer \u2014 ce sont des avertissements, pas des erreurs, et ils sont souvent sans cons\u00e9quence pour des capteurs personnalis\u00e9s ou faits maison.\n\n{warnings}\n\nS\u00e9lectionnez Envoyer pour enregistrer l'association telle quelle, ou revenez en arri\u00e8re pour la modifier."
+      },
+      "settings": {
+        "title": "Param\u00e8tres",
+        "description": "Ajustez l'intervalle d'interrogation, le d\u00e9lai d'expiration des capteurs et l'association des capteurs. Pour modifier les identifiants d'un r\u00e9seau, supprimez-le puis rajoutez-le.",
+        "data": {
+          "interval": "Intervalle d'interrogation des capteurs",
+          "max_sensor_age": "D\u00e9lai d'expiration"
+        },
+        "data_description": {
+          "interval": "Fr\u00e9quence de lecture de vos capteurs, en secondes. Chaque r\u00e9seau est brid\u00e9 s\u00e9par\u00e9ment afin de respecter sa propre limite de d\u00e9bit.",
+          "max_sensor_age": "\u00c9carter les relev\u00e9s dont l'entit\u00e9 n'a plus rien transmis depuis ce d\u00e9lai. Cela suit le fait que votre station \u00e9met encore des donn\u00e9es, et non que la valeur change : un pluviom\u00e8tre indiquant 0,0 pendant une semaine s\u00e8che n'est donc pas affect\u00e9. Mettez 0 pour d\u00e9sactiver (d\u00e9conseill\u00e9 : le dernier relev\u00e9 d'une station en panne serait alors republi\u00e9 comme actuel, ind\u00e9finiment)."
+        }
+      },
+      "add_network": {
+        "title": "Ajouter un r\u00e9seau m\u00e9t\u00e9orologique",
+        "description": "Choisissez un ou plusieurs r\u00e9seaux \u00e0 ajouter. Vous saisirez les identifiants de chacun dans les \u00e9crans suivants.",
+        "data": {
+          "services": "R\u00e9seaux \u00e0 ajouter"
+        }
+      },
+      "remove_network": {
+        "title": "Supprimer un r\u00e9seau m\u00e9t\u00e9orologique",
+        "description": "Choisissez un ou plusieurs r\u00e9seaux \u00e0 supprimer. Leurs identifiants enregistr\u00e9s sont effac\u00e9s et les envois vers ces r\u00e9seaux s'arr\u00eatent. Votre association de capteurs n'est pas modifi\u00e9e.",
+        "data": {
+          "services": "R\u00e9seaux \u00e0 supprimer"
+        }
+      }
+    },
+    "abort": {
+      "all_networks_configured": "Tous les r\u00e9seaux pris en charge sont d\u00e9j\u00e0 configur\u00e9s.",
+      "no_networks_configured": "Il n'y a aucun r\u00e9seau \u00e0 supprimer."
+    }
+  },
+  "selector": {
+    "services": {
+      "options": {
+        "wow_be": "WOW-BE - IRM/KMI (Belgique)",
+        "wunderground": "Weather Underground",
+        "cwop": "CWOP / NOAA (alimente MADIS + National Weather Service)",
+        "pwsweather": "PWSWeather",
+        "windy": "Windy",
+        "openweathermap": "OpenWeatherMap"
+      }
+    },
+    "owm_mode": {
+      "options": {
+        "create": "Cr\u00e9er une nouvelle station",
+        "existing": "Utiliser un ID de station existant"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "upload_status": {
+        "name": "\u00c9tat de l'envoi"
+      },
+      "source_data": {
+        "name": "Probl\u00e8me de donn\u00e9es source"
+      }
+    }
+  }
+}
