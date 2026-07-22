@@ -476,3 +476,76 @@ async def test_cwop_connect_uses_happy_eyeballs():
         await up.send({"temperature": 18.0})
 
     assert captured.get("happy_eyeballs_delay") == HAPPY_EYEBALLS_DELAY
+
+
+def test_redact_packet_masks_position_only():
+    """The debug log must not carry the station's exact coordinates.
+
+    The packet holds no credential -- CWOP's passcode is the public
+    constant -1 and is sent on the login line, never logged -- but it
+    does embed exact coordinates, and debug logs get pasted into issue
+    reports. The callsign, timestamp and weather fields stay, so a
+    malformed packet is still diagnosable.
+    """
+    from datetime import UTC, datetime
+
+    from custom_components.weather_uploader.uploaders.cwop import (
+        build_packet,
+        redact_packet,
+    )
+
+    data = {
+        "wind_direction": 180.0,
+        "wind_speed": 3.0,
+        "wind_gust": 5.0,
+        "temperature": 18.5,
+        "humidity": 87.0,
+        "pressure_relative": 1013.2,
+    }
+    packet = build_packet(
+        "EW9876",
+        52.0906789,
+        5.1214321,
+        data,
+        timestamp=datetime(2026, 7, 20, 14, 30, tzinfo=UTC),
+    )
+    redacted = redact_packet(packet)
+
+    # Coordinates gone.
+    assert "5205.44N" not in redacted
+    assert "00507.29E" not in redacted
+    assert "<position redacted>" in redacted
+    # Diagnostic content kept.
+    for keep in ("EW9876", "201430z", "h87", "b10132"):
+        assert keep in redacted
+    # Redaction is for logging only; the wire packet is unchanged.
+    assert "5205.44N" in packet
+
+
+def test_redact_packet_handles_southern_western_hemisphere():
+    """S/W coordinates are masked too, not just N/E."""
+    from datetime import UTC, datetime
+
+    from custom_components.weather_uploader.uploaders.cwop import (
+        build_packet,
+        redact_packet,
+    )
+
+    packet = build_packet(
+        "VK1ABC",
+        -33.8688,
+        -151.2093,
+        {"temperature": 20.0},
+        timestamp=datetime(2026, 1, 5, 3, 7, tzinfo=UTC),
+    )
+    redacted = redact_packet(packet)
+    assert "<position redacted>" in redacted
+    assert "3352.12S" not in redacted
+
+
+def test_redact_packet_is_idempotent():
+    """Redacting already-redacted text changes nothing."""
+    from custom_components.weather_uploader.uploaders.cwop import redact_packet
+
+    once = redact_packet("EW1>APRS,TCPIP*:@010000z0030.00N/00030.00E_.../...g...t050")
+    assert redact_packet(once) == once
