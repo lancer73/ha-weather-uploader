@@ -65,6 +65,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -129,6 +130,26 @@ def format_longitude(value: float) -> str:
     degrees = int(value)
     minutes = (value - degrees) * 60
     return f"{degrees:03d}{minutes:05.2f}{hemisphere}"
+
+
+def redact_packet(packet: str) -> str:
+    """Return ``packet`` with the station position masked, for logging.
+
+    The packet carries no credential -- CWOP's passcode is the public
+    constant ``-1`` and lives in the login line, which is never logged --
+    but it does embed the station's exact coordinates. Those are
+    published to APRS-IS anyway, yet debug logs get pasted into forum
+    posts and issue reports, so the position is masked here while the
+    callsign, timestamp, and weather fields stay intact and useful for
+    diagnosing a malformed packet.
+    """
+    return _POSITION_RE.sub("<position redacted>", packet, count=1)
+
+
+#: The position segment of an APRS packet: ``ddmm.hhN/dddmm.hhW``,
+#: anchored between the timestamp's trailing ``z`` and the ``_`` that
+#: begins the wind fields, so it cannot match weather data.
+_POSITION_RE = re.compile(r"(?<=z)\d{2}\d{2}\.\d{2}[NS]/\d{3}\d{2}\.\d{2}[EW](?=_)")
 
 
 def _fixed(value: float | None, width: int, scale: float = 1.0) -> str:
@@ -317,7 +338,7 @@ class CwopUploader(BaseUploader):
 
             # There is no application-level ack: TCP delivery is the ack.
             self.clear_error()
-            _LOGGER.debug("CWOP packet sent: %s", packet)
+            _LOGGER.debug("CWOP packet sent: %s", redact_packet(packet))
             return True
         except TimeoutError:
             # A later read/write phase timed out (not the connection).
