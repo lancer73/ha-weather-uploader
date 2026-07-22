@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-22
+
+Pre-1.0: the configuration schema and entity IDs may still change before
+1.0.0.
+
+### Added
+
+- Dutch (`nl`) and French (`fr`) translations of the configuration and
+  options flows, including the network selector and entity names.
+  Technical identifiers (`rain_rate`), proper nouns, and placeholders
+  are left verbatim. Tests check both files stay structurally in sync
+  with the English source, since a missing key falls back silently and a
+  dropped placeholder breaks formatting at runtime.
+
+### Changed
+
+- The CWOP debug log no longer prints the station's exact coordinates.
+  The packet carries no credential -- CWOP's passcode is the public
+  constant `-1` and travels on the login line, which is never logged --
+  but it does embed the position, and debug logs get pasted into issue
+  reports and forum posts. The position is now masked in the log line
+  while the callsign, timestamp and weather fields remain, so a
+  malformed packet is still diagnosable. The packet sent on the wire is
+  unchanged.
+
 ## [0.9.0] - 2026-07-20
 
 Pre-1.0: the configuration schema and entity IDs may still change before
@@ -560,7 +585,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.6.0...v0.7.0

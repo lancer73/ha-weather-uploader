@@ -721,6 +721,14 @@ Request parameters are never logged. Response bodies are truncated to
 while this integration is running: it logs full request URLs, including
 every credential above.
 
+CWOP is the one uploader that logs its outbound content, since the APRS
+packet is the only way to diagnose a wire-format problem. It carries no
+credential — the passcode is the public constant `-1` and travels on the
+login line, which is never logged — but it does embed your coordinates,
+so the position is masked in the log line. The callsign, timestamp, and
+weather fields are kept. Debug logs are therefore safe to paste into a
+bug report; the packet actually sent to APRS-IS is unaffected.
+
 ### Data you may not intend to publish
 
 `indoor_temperature`, `indoor_humidity`, and `co2` are occupancy

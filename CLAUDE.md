@@ -450,7 +450,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.9.0**. Semantic Versioning 2.0.0.
+Current release: **0.10.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 
