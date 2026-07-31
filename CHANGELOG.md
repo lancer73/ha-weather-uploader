@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-31
+
+No code changes. This is the first production level release of the integration.
+
+### Changed
+
+- Added shields in README.MD
+
 ## [0.10.0] - 2026-07-22
 
 Pre-1.0: the configuration schema and entity IDs may still change before
