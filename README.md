@@ -1,5 +1,4 @@
 [![Release](https://img.shields.io/github/v/release/lancer73/ha-weather-uploader?label=latest-release&color=green&logo=github)](https://github.com/lancer73/ha-weather-uploader/releases/latest)
-![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/lancer73/ha-weather-uploader/latest/total?color=green)
 ![Build Status Hassfest](https://img.shields.io/github/actions/workflow/status/lancer73/ha-weather-uploader/hassfest.yml?label=hassfest)
 ![Build Status HACS](https://img.shields.io/github/actions/workflow/status/lancer73/ha-weather-uploader/hacs.yml?label=hacs)
 ![GitHub License](https://img.shields.io/github/license/lancer73/ha-weather-uploader)
