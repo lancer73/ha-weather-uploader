@@ -450,13 +450,11 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **0.10.0**. Semantic Versioning 2.0.0.
+Current release: **1.0.0**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 
-Pre-1.0 caveat: while the major is 0, the config schema and entity IDs
-are not yet stable, so a breaking change is a MINOR bump (0.x.0) rather
-than a MAJOR one until 1.0.0 is declared. After 1.0.0:
+After 1.0.0:
 
 - **MAJOR** — config entry schema changes requiring migration, removing
   a sensor key, removing a network, or changing an internal unit.
