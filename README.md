@@ -77,11 +77,10 @@ network and drops any field you have not mapped.
 
 ### HACS (custom repository)
 
-1. HACS → Integrations → ⋮ → Custom repositories
-2. Add `https://github.com/lancer73/ha-weather-uploader`, category
-   "Integration"
-3. Install "Weather Network Uploader"
-4. Restart Home Assistant
+This integration is part of HACS. Install by clicking the button below.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lancer73&repository=ha-weather-uploader&category=integration)
+
 
 ### Manual
 
