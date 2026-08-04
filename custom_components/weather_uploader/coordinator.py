@@ -18,8 +18,9 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfVolumetricFlux,
 )
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import (
@@ -48,6 +49,20 @@ _LOGGER = logging.getLogger(__name__)
 # session). Spacing them out keeps well within the 60 s minimum poll
 # interval even with every network enabled.
 UPLOAD_STAGGER_SECONDS: Final = 5
+
+# Latency margin added to the dispatch window when computing the due-check
+# tolerance, covering the network round-trip between a poll tick and when
+# the send actually completes and stamps last_sent.
+DUE_TOLERANCE_MARGIN: Final = 2
+
+# The post-restart reseed refresh is debounced this many seconds and
+# re-armed as each status sensor restores, so it runs once after the last
+# one rather than on the first, partial restore. Measured from the last
+# restore, not the first, so a generous value costs only a few seconds
+# before the first post-restart upload (harmless against 60-300s upload
+# intervals) while widening the margin for all sensors to finish
+# restoring on a slow startup.
+RESEED_REFRESH_DELAY: Final = 5
 
 _INVALID_STATES = {STATE_UNKNOWN, STATE_UNAVAILABLE, "", "none", "None"}
 
@@ -82,6 +97,15 @@ def _reported_at(state: State) -> datetime:
     ``last_reported`` arrived in Home Assistant 2024.4. The manifest
     requires a newer version than that, but the fallback keeps this
     honest rather than raising AttributeError on an old core.
+
+    Known limitation (accepted, not guarded): a source sensor that
+    restores its own state on a Home Assistant restart gets a fresh
+    ``last_reported`` at startup, so for up to ``max_sensor_age`` after a
+    restart a dead station can look freshly reported and its stale value
+    may be published. Guarding this (e.g. against HA's start time) risks
+    suppressing valid data after every reboot, a worse failure than the
+    narrow window it would close, so it is documented rather than fixed.
+    See the "first hour after a restart" note in the README.
     """
     return getattr(state, "last_reported", None) or state.last_updated
 
@@ -175,6 +199,10 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             settings_source.get(CONF_MAX_SENSOR_AGE, DEFAULT_MAX_SENSOR_AGE)
         )
         self._warned: set[str] = set()
+        # Pending debounce for the post-reseed refresh. Re-armed on each
+        # sensor restore so the refresh fires once, after every network's
+        # success/error pair has restored -- not on the first, partial one.
+        self._reseed_refresh_unsub: CALLBACK_TYPE | None = None
         # Populated by read_sensors() on every cycle, for diagnostics.
         self.stale_sensors: list[str] = []
         self.missing_sensors: list[str] = []
@@ -333,7 +361,11 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("No usable sensor data, skipping upload cycle")
             return self._carry_forward({})
 
-        due = [uploader for uploader in self.uploaders if uploader.is_due()]
+        due = [
+            uploader
+            for uploader in self.uploaders
+            if uploader.is_due(tolerance=self._due_tolerance())
+        ]
         if not due:
             _LOGGER.debug("No network due this tick")
             return self._carry_forward(data)
@@ -353,16 +385,24 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # resolve DNS and connect simultaneously, which could overwhelm a
         # constrained resolver and cause DNS timeouts. Sequential order is
         # preserved so outcomes line up with `due` below.
-        outcomes: list[bool | BaseException] = []
+        outcomes: list[bool | Exception] = []
+        attempt_times: dict[str, Any] = {}
         for index, uploader in enumerate(due):
             if index > 0:
                 await asyncio.sleep(UPLOAD_STAGGER_SECONDS)
             try:
                 outcomes.append(await uploader.send(data))
-            except BaseException as err:
-                # Mirror gather(return_exceptions=True): capture, don't
-                # let one network's crash abort the rest of the cycle.
+            except Exception as err:
+                # Capture per-network failures so one crash does not abort
+                # the rest of the cycle. CancelledError (a BaseException,
+                # not caught here) propagates, so a shutdown or reload
+                # cancels the cycle cleanly instead of sleeping on.
                 outcomes.append(err)
+            # Stamp the attempt time here, right after the send, not in
+            # the results loop below: with several staggered networks that
+            # loop runs up to (n-1) * stagger seconds later, which would
+            # backdate every network's success to the same late instant.
+            attempt_times[uploader.name] = dt_util.utcnow()
 
         previous = self.data or {}
         results: dict[str, bool] = dict(previous.get("results", {}))
@@ -371,6 +411,7 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         counts: dict[str, int] = dict(previous.get("counts", {}))
         error_codes: dict[str, str | None] = dict(previous.get("error_codes", {}))
         error_times: dict[str, Any] = dict(previous.get("error_times", {}))
+        success_times: dict[str, Any] = dict(previous.get("success_times", {}))
 
         for uploader, outcome in zip(due, outcomes, strict=True):
             # A failed attempt still consumed the provider's budget, so
@@ -386,13 +427,19 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             counts[uploader.name] = uploader.measurement_count(data)
             error_codes[uploader.name] = uploader.last_error_code
             error_times[uploader.name] = uploader.last_error_time
-            if isinstance(outcome, BaseException):
+            if isinstance(outcome, Exception):
                 _LOGGER.error("%s raised unexpectedly: %s", uploader.name, outcome)
                 results[uploader.name] = False
                 errors[uploader.name] = str(outcome)
             else:
                 results[uploader.name] = outcome
                 errors[uploader.name] = uploader.last_error
+                if outcome:
+                    # Record when this network last actually accepted
+                    # data, distinct from the last-error time. Left in
+                    # place across later failures, so "when did this last
+                    # work" survives a run of errors.
+                    success_times[uploader.name] = attempt_times[uploader.name]
 
         return {
             "data": data,
@@ -402,7 +449,107 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "counts": counts,
             "error_codes": error_codes,
             "error_times": error_times,
+            "success_times": success_times,
         }
+
+    @callback
+    def reseed_throttles_from_restored_state(self) -> None:
+        """Re-seed each network's throttle from its restored last attempt.
+
+        Runs as the status sensors restore their last-success and
+        last-error times into ``self.data``. The last *attempt* for a
+        network is the later of those two (an attempt ends as one or the
+        other), and throttling gates on attempts -- a failed attempt
+        still spent the provider's rate budget. So seeding from the last
+        attempt skips the wasteful full-interval wait after a restart
+        while still honouring a rate limit that a recent failed attempt
+        implies. If neither time was restored, the conservative
+        construction-time seed stands.
+
+        The two sensors per network restore separately, so this may run
+        more than once; seeding is deterministic (it recomputes the same
+        max each time), so re-running is harmless and simply incorporates
+        whichever time arrived later. The follow-up refresh is debounced
+        and re-armed on each call, so it fires once, after every
+        network's success/error pair has restored -- never on the first,
+        partial restore, which would seed from an incomplete last-attempt
+        time and could upload on stale throttle state.
+        """
+        data = self.data or {}
+        success_times = data.get("success_times", {})
+        error_times = data.get("error_times", {})
+        now = dt_util.utcnow()
+        reseeded_any = False
+
+        for uploader in self.uploaders:
+            times = [
+                t
+                for t in (
+                    success_times.get(uploader.name),
+                    error_times.get(uploader.name),
+                )
+                if t is not None
+            ]
+            if not times:
+                continue
+            last_attempt = max(times)
+            seconds_since = (now - last_attempt).total_seconds()
+            uploader.seed_from_last_attempt(seconds_since)
+            reseeded_any = True
+
+        if reseeded_any:
+            # Re-arm: cancel any pending refresh and schedule a new one a
+            # moment out. Each sensor restore pushes it back, so it lands
+            # only after the last one has updated the throttle state.
+            if self._reseed_refresh_unsub is not None:
+                self._reseed_refresh_unsub()
+            self._reseed_refresh_unsub = async_call_later(
+                self.hass,
+                RESEED_REFRESH_DELAY,
+                self._fire_reseed_refresh,
+            )
+
+    @callback
+    def _fire_reseed_refresh(self, _now: Any) -> None:
+        """Dispatch the debounced post-reseed refresh."""
+        self._reseed_refresh_unsub = None
+        self.hass.async_create_task(self.async_request_refresh())
+
+    async def async_shutdown(self) -> None:
+        """Cancel any pending reseed refresh, then shut down normally."""
+        if self._reseed_refresh_unsub is not None:
+            self._reseed_refresh_unsub()
+            self._reseed_refresh_unsub = None
+        await super().async_shutdown()
+
+    def _due_tolerance(self) -> float:
+        """Seconds of shortfall to forgive when checking if a network is due.
+
+        Sends are dispatched a moment after each poll tick -- staggered by
+        ``UPLOAD_STAGGER_SECONDS`` per network, plus network latency -- so
+        ``last_sent`` lands slightly after the tick. A network whose
+        ``min_interval`` equals the poll interval would then read as
+        fractionally not-due on every tick and fire only every other one
+        (the reported 2-minute cadence on a 1-minute poll). The tolerance
+        forgives exactly that dispatch offset.
+
+        It is sized to the worst-case dispatch window -- the last network's
+        stagger slot plus a small latency margin -- so every network fires
+        on schedule regardless of its slot. It is then capped at half the
+        poll interval, so even a poll interval shorter than the dispatch
+        window can never let the tolerance approach a real rate limit: a
+        network still cannot send twice in one cycle, so the true
+        send-to-send gap stays at least the poll interval.
+        """
+        throttled = sum(1 for u in self.uploaders if u.min_interval > 0)
+        if throttled <= 0:
+            return 0.0
+        window = (throttled - 1) * UPLOAD_STAGGER_SECONDS + DUE_TOLERANCE_MARGIN
+        interval = getattr(self, "update_interval", None)
+        poll = interval.total_seconds() if interval else 0.0
+        if poll > 0:
+            return min(window, poll / 2)
+        return window
 
     def _carry_forward(self, data: dict[str, float]) -> dict[str, Any]:
         """Return prior statuses unchanged, with new sensor data."""
@@ -415,6 +562,7 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "counts": dict(previous.get("counts", {})),
             "error_codes": dict(previous.get("error_codes", {})),
             "error_times": dict(previous.get("error_times", {})),
+            "success_times": dict(previous.get("success_times", {})),
         }
 
     @property
