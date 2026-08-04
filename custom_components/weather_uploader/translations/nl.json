@@ -36,11 +36,11 @@
       },
       "confirm_mapping": {
         "title": "Sensorkoppeling controleren",
-        "description": "Sommige koppelingen zien er ongebruikelijk uit. Je kunt gewoon doorgaan \u2014 dit zijn waarschuwingen, geen fouten, en ze zijn vaak prima voor zelfbouw- of aangepaste sensoren.\n\n{warnings}\n\nKies Verzenden om de koppeling zo op te slaan, of ga terug om ze aan te passen."
+        "description": "Sommige koppelingen zien er ongebruikelijk uit. Je kunt gewoon doorgaan — dit zijn waarschuwingen, geen fouten, en ze zijn vaak prima voor zelfbouw- of aangepaste sensoren.\n\n{warnings}\n\nKies Verzenden om de koppeling zo op te slaan, of ga terug om ze aan te passen."
       },
       "owm_station": {
         "title": "OpenWeatherMap instellen",
-        "description": "OpenWeatherMap-stations worden via de API aangemaakt \u2014 er is geen aanmelding via de website, en de stations-ID die je voor uploads nodig hebt bestaat pas zodra er een station is aangemaakt.\n\nVoer je OpenWeatherMap API-sleutel in en kies vervolgens of je nu een nieuw station aanmaakt of de interne ID van een bestaand station gebruikt.",
+        "description": "OpenWeatherMap-stations worden via de API aangemaakt — er is geen aanmelding via de website, en de stations-ID die je voor uploads nodig hebt bestaat pas zodra er een station is aangemaakt.\n\nVoer je OpenWeatherMap API-sleutel in en kies vervolgens of je nu een nieuw station aanmaakt of de interne ID van een bestaand station gebruikt.",
         "data": {
           "key": "API-sleutel",
           "mode": "Station"
@@ -52,7 +52,7 @@
       },
       "owm_create": {
         "title": "OpenWeatherMap-station aanmaken",
-        "description": "Hiermee wordt een nieuw station op je OpenWeatherMap-account geregistreerd en de interne ID die daarbij wordt teruggegeven opgeslagen. De locatie is vooraf ingevuld vanuit je Home Assistant-instellingen \u2014 pas ze aan als je liever een afgeronde of andere locatie publiceert. Als er al een station met dezelfde aanduiding bestaat, wordt dat hergebruikt in plaats van gedupliceerd.",
+        "description": "Hiermee wordt een nieuw station op je OpenWeatherMap-account geregistreerd en de interne ID die daarbij wordt teruggegeven opgeslagen. De locatie is vooraf ingevuld vanuit je Home Assistant-instellingen — pas ze aan als je liever een afgeronde of andere locatie publiceert. Als er al een station met dezelfde aanduiding bestaat, wordt dat hergebruikt in plaats van gedupliceerd.",
         "data": {
           "external_id": "Stationsaanduiding",
           "name": "Stationsnaam",
@@ -61,7 +61,7 @@
           "altitude": "Hoogte"
         },
         "data_description": {
-          "external_id": "Een korte aanduiding naar keuze (letters, cijfers, liggende streepjes). Niet de interne ID \u2014 die genereert OpenWeatherMap zelf.",
+          "external_id": "Een korte aanduiding naar keuze (letters, cijfers, liggende streepjes). Niet de interne ID — die genereert OpenWeatherMap zelf.",
           "name": "Vooraf ingevuld vanuit de naam van je Home Assistant-locatie. Een weergavenaam voor het station op OpenWeatherMap.",
           "latitude": "Vooraf ingevuld vanuit Home Assistant. Rond af op ~3 decimalen (ongeveer 100 m) als je niet wilt dat je exacte locatie wordt gepubliceerd.",
           "longitude": "Vooraf ingevuld vanuit Home Assistant. Rond af op ~3 decimalen (ongeveer 100 m) als je niet wilt dat je exacte locatie wordt gepubliceerd.",
@@ -75,7 +75,7 @@
           "station_id": "Interne stations-ID"
         },
         "data_description": {
-          "station_id": "De interne ID die OpenWeatherMap voor het station heeft gegenereerd \u2014 niet de aanduiding die je zelf hebt gekozen."
+          "station_id": "De interne ID die OpenWeatherMap voor het station heeft gegenereerd — niet de aanduiding die je zelf hebt gekozen."
         }
       }
     },
@@ -101,7 +101,7 @@
       },
       "confirm_mapping": {
         "title": "Sensorkoppeling controleren",
-        "description": "Sommige koppelingen zien er ongebruikelijk uit. Je kunt gewoon doorgaan \u2014 dit zijn waarschuwingen, geen fouten, en ze zijn vaak prima voor zelfbouw- of aangepaste sensoren.\n\n{warnings}\n\nKies Verzenden om de koppeling zo op te slaan, of ga terug om ze aan te passen."
+        "description": "Sommige koppelingen zien er ongebruikelijk uit. Je kunt gewoon doorgaan — dit zijn waarschuwingen, geen fouten, en ze zijn vaak prima voor zelfbouw- of aangepaste sensoren.\n\n{warnings}\n\nKies Verzenden om de koppeling zo op te slaan, of ga terug om ze aan te passen."
       },
       "settings": {
         "title": "Instellingen",
@@ -138,7 +138,7 @@
   "selector": {
     "services": {
       "options": {
-        "wow_be": "WOW-BE - KMI/IRM (Belgi\u00eb)",
+        "wow_be": "WOW-BE - KMI/IRM (België)",
         "wunderground": "Weather Underground",
         "cwop": "CWOP / NOAA (levert aan MADIS + National Weather Service)",
         "pwsweather": "PWSWeather",
@@ -160,6 +160,14 @@
       },
       "source_data": {
         "name": "Probleem met brongegevens"
+      }
+    },
+    "sensor": {
+      "last_error": {
+        "name": "{network} laatste fout"
+      },
+      "last_success": {
+        "name": "{network} laatste geslaagde upload"
       }
     }
   }

@@ -161,6 +161,14 @@
       "source_data": {
         "name": "Source data problem"
       }
+    },
+    "sensor": {
+      "last_error": {
+        "name": "{network} last error"
+      },
+      "last_success": {
+        "name": "{network} last success"
+      }
     }
   }
 }
