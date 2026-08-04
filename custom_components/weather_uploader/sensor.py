@@ -125,7 +125,11 @@ class UploadErrorSensor(_BaseNetworkSensor):
     def __init__(self, coordinator: UploadCoordinator, service_name: str) -> None:
         """Initialise the error sensor for one network."""
         super().__init__(coordinator, service_name, "last_error")
-        self._attr_name = f"{service_name} last error"
+        # Translated name composed from the network via a placeholder, so
+        # the per-network sensor names follow the UI language instead of
+        # being hard-coded English.
+        self._attr_translation_key = "last_error"
+        self._attr_translation_placeholders = {"network": service_name}
 
     def _restore(self, last_state: Any) -> None:
         """Seed the restored error code, message, and time into the coordinator.
@@ -201,7 +205,8 @@ class LastSuccessSensor(_BaseNetworkSensor):
     def __init__(self, coordinator: UploadCoordinator, service_name: str) -> None:
         """Initialise the last-success sensor for one network."""
         super().__init__(coordinator, service_name, "last_success")
-        self._attr_name = f"{service_name} last success"
+        self._attr_translation_key = "last_success"
+        self._attr_translation_placeholders = {"network": service_name}
 
     def _restore(self, last_state: Any) -> None:
         """Seed the restored success timestamp into the coordinator."""
