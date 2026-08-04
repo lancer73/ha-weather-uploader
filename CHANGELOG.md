@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The per-network status sensor names (last error, last success) are now
+  localized, following the Home Assistant UI language via a `{network}`
+  placeholder rather than being hard-coded English. Dutch and French
+  names are included. This also covers the last-error sensor, whose name
+  was previously English-only in every language.
 - The per-network last-error and last-success sensors now restore their
   state across a Home Assistant restart. Coordinator status is in-memory
   only, so previously both read unknown after a reboot until the next
