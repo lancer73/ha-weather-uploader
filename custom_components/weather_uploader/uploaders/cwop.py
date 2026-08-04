@@ -213,9 +213,12 @@ def build_packet(
 
     humidity = data.get("humidity")
     if humidity is not None:
-        # h00 means 100%: the field is two digits only.
+        # h00 means 100%: the field is two digits only. A genuine 0%
+        # reading must not become h00 (which would read as 100%), so
+        # clamp the low end to 1 -- the closest representable value.
         rounded = round(humidity)
-        packet += f"h{0 if rounded >= 100 else max(0, rounded):02d}"
+        encoded = 0 if rounded >= 100 else max(1, rounded)
+        packet += f"h{encoded:02d}"
 
     pressure = data.get("pressure_relative")
     if pressure is not None:
@@ -298,7 +301,11 @@ class CwopUploader(BaseUploader):
     async def send(self, data: dict[str, float]) -> bool:
         """Connect, log in, send one packet, disconnect."""
         packet = build_packet(self._id or "", self.latitude, self.longitude, data)
-        self._last_payload = {"packet": packet}
+        # last_payload surfaces as an entity attribute, which the recorder
+        # persists and the states API exposes. The packet embeds exact
+        # coordinates, so store the position-redacted form here; the raw
+        # packet still goes on the wire below. (The debug log redacts too.)
+        self._last_payload = {"packet": redact_packet(packet)}
         login = (
             f"user {self._id} pass {CWOP_PASSCODE} "
             f"vers {SOFTWARE_NAME} {SOFTWARE_VERSION}"

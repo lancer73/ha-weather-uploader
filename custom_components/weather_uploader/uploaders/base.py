@@ -138,6 +138,33 @@ class BaseUploader(ABC):
         self.last_error = message  # redacts the key
         self._last_error_time = dt_util.utcnow()
 
+    def restore_error_state(
+        self,
+        *,
+        code: str | None,
+        message: str | None,
+        error_time: datetime | None,
+    ) -> None:
+        """Seed error state from values restored across a restart.
+
+        A restart rebuilds every uploader with empty error state, so the
+        first successful cycle would otherwise write ``last_error_time =
+        None`` over whatever the status sensor restored, discarding the
+        real time of the last pre-restart failure. Seeding the uploader
+        itself means the coordinator reads the restored values back on
+        the next cycle, so the history survives. Only fills empty fields,
+        so a fresh error recorded before this runs is never clobbered.
+        The message is assumed already redacted (it round-tripped through
+        the sensor from a prior redacted store); it is set directly
+        rather than through the redacting setter.
+        """
+        if self._last_error_code is None:
+            self._last_error_code = code
+        if self._last_error is None:
+            self._last_error = message
+        if self._last_error_time is None:
+            self._last_error_time = error_time
+
     def clear_error(self) -> None:
         """Record a successful send: no error, no code."""
         self._last_error = None
@@ -183,7 +210,7 @@ class BaseUploader(ABC):
             return text.replace(self._key, "***")
         return text
 
-    def is_due(self, now: float | None = None) -> bool:
+    def is_due(self, now: float | None = None, tolerance: float = 0.0) -> bool:
         """Return True when enough time has passed to send again.
 
         Uses a monotonic clock so a system time change cannot stall an
@@ -192,11 +219,23 @@ class BaseUploader(ABC):
         first send waits ``min_interval`` after start rather than firing
         immediately -- this is what keeps a restart from tripping a
         provider's rate limit.
+
+        ``tolerance`` forgives a small shortfall against ``min_interval``.
+        It exists because sends are dispatched a moment after the poll
+        tick (staggered, plus network latency), so ``last_sent`` is
+        stamped slightly after the tick. Without tolerance, a network
+        whose ``min_interval`` equals the poll interval reads as "not yet
+        due" by that fraction on every tick and so fires only every other
+        tick. The caller sizes the tolerance to the dispatch window and
+        caps it well below ``min_interval``, so it corrects the
+        measurement offset without letting a network actually send faster
+        than its rate limit -- a network cannot send twice in one cycle,
+        so the true send-to-send gap stays at least the poll interval.
         """
         if self.min_interval <= 0 or self.last_sent is None:
             return True
         current = time.monotonic() if now is None else now
-        return (current - self.last_sent) >= self.min_interval
+        return (current - self.last_sent) >= (self.min_interval - tolerance)
 
     def mark_sent(self) -> None:
         """Record a send attempt for throttling purposes.
@@ -206,6 +245,34 @@ class BaseUploader(ABC):
         immediately would make a 429 worse.
         """
         self.last_sent = time.monotonic()
+
+    def seed_from_last_attempt(self, seconds_since_attempt: float) -> None:
+        """Seed the throttle from a known prior attempt across a restart.
+
+        Normally ``last_sent`` is seeded to construction time, so after a
+        restart the first send waits a full ``min_interval`` -- safe, but
+        wasteful when the real last attempt was long ago. When the last
+        attempt time is recoverable (from the restored last-success and
+        last-error timestamps, whichever is later -- an attempt is one or
+        the other), pass how long ago it was, and the throttle is placed
+        as if that attempt really happened then: an already-elapsed
+        interval makes the network due at once, a recent one still waits
+        out the remainder.
+
+        ``seconds_since_attempt`` must be clamped by the caller to a sane,
+        non-negative range, since it derives from wall-clock times that a
+        clock change during downtime could distort. It has no effect on
+        an unthrottled uploader.
+        """
+        if self.min_interval <= 0:
+            return
+        # Place last_sent in the monotonic past by the elapsed wall-clock
+        # time. is_due then compares against min_interval exactly as if
+        # the attempt had happened then. Cap the backdating at
+        # min_interval: any older and the network is simply due now, and
+        # we never need to look further back than one interval.
+        elapsed = max(0.0, min(seconds_since_attempt, self.min_interval))
+        self.last_sent = time.monotonic() - elapsed
 
     #: Normalized reading keys this network accepts. Subclasses override
     #: this; it drives the measurement count the status sensor reports,
