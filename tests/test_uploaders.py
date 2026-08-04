@@ -549,3 +549,48 @@ def test_redact_packet_is_idempotent():
 
     once = redact_packet("EW1>APRS,TCPIP*:@010000z0030.00N/00030.00E_.../...g...t050")
     assert redact_packet(once) == once
+
+
+def test_cwop_humidity_zero_not_encoded_as_full():
+    """A genuine 0% RH must not become h00, which CWOP reads as 100%."""
+    from custom_components.weather_uploader.uploaders.cwop import build_packet
+
+    packet = build_packet("EW1", 52.0, 5.0, {"humidity": 0.0})
+    assert "h01" in packet  # clamped to 1, not h00
+    assert "h00" not in packet
+
+
+def test_cwop_humidity_hundred_is_h00():
+    """100% RH is correctly encoded as h00."""
+    from custom_components.weather_uploader.uploaders.cwop import build_packet
+
+    packet = build_packet("EW1", 52.0, 5.0, {"humidity": 100.0})
+    assert "h00" in packet
+
+
+def test_cwop_last_payload_is_redacted():
+    """last_payload reaches the recorder/states API, so it must not carry
+    exact coordinates."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from custom_components.weather_uploader.uploaders.cwop import CwopUploader
+
+    up = CwopUploader(
+        None, "EW9876", min_interval=0, latitude=52.0906, longitude=5.1214
+    )
+
+    async def fake_open(host, port, **kwargs):
+        reader = MagicMock()
+        reader.readline = AsyncMock(return_value=b"# banner\r\n")
+        writer = MagicMock()
+        writer.drain = AsyncMock()
+        writer.wait_closed = AsyncMock()
+        return reader, writer
+
+    with patch("asyncio.open_connection", fake_open):
+        asyncio.run(up.send({"temperature": 18.0}))
+
+    stored = up.last_payload.get("packet", "")
+    assert "<position redacted>" in stored
+    assert "5205.44N" not in stored

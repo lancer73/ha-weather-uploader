@@ -131,7 +131,7 @@ async def test_uploads_are_staggered(monkeypatch):
             self.last_error_code = None
             self.last_error_time = None
 
-        def is_due(self):
+        def is_due(self, now=None, tolerance=0.0):
             return True
 
         def mark_sent(self):
@@ -185,7 +185,7 @@ async def test_shortest_period_networks_upload_first(monkeypatch):
             self.last_error_code = None
             self.last_error_time = None
 
-        def is_due(self):
+        def is_due(self, now=None, tolerance=0.0):
             return True
 
         def mark_sent(self):
@@ -218,3 +218,31 @@ async def test_shortest_period_networks_upload_first(monkeypatch):
 
     assert order == sorted(order)  # ascending by min_interval
     assert order[0] == 60 and order[-1] == 300
+
+
+# --- Last-successful-upload sensor --------------------------------------
+
+
+def _success_sensor(success_time):
+    from custom_components.weather_uploader.sensor import LastSuccessSensor
+
+    coordinator = MagicMock()
+    coordinator.entry.entry_id = "abc"
+    coordinator.data = {"success_times": {"Windy": success_time}}
+    return LastSuccessSensor(coordinator, "Windy")
+
+
+def test_last_success_sensor_reports_timestamp():
+    from datetime import datetime
+
+    from homeassistant.components.sensor import SensorDeviceClass
+
+    when = datetime(2026, 7, 31, 10, 0, tzinfo=UTC)
+    sensor = _success_sensor(when)
+    assert sensor.native_value == when
+    assert sensor._attr_device_class == SensorDeviceClass.TIMESTAMP
+
+
+def test_last_success_sensor_none_before_first_success():
+    sensor = _success_sensor(None)
+    assert sensor.native_value is None
