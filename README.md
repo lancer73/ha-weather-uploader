@@ -214,11 +214,16 @@ throttles itself against its own minimum, so a 60 s poll sends to WOW-BE
 every minute while Windy still only receives an update every 5 minutes.
 
 The per-network throttle is also seeded at startup, so restarting Home
-Assistant does not trigger an immediate extra upload. After a restart
-each network waits its own minimum before the first send, rather than
-firing at once and risking a rate-limit rejection. The cost is that the
-first upload after a restart is delayed by up to that minimum, which is
-harmless; a 429 is not.
+Assistant does not trigger an immediate extra upload that could trip a
+rate limit. When a network's last-success and last-error times survive
+the restart (they are restored), the throttle is seeded from the *real*
+last attempt — the later of those two — rather than blindly waiting a
+full interval. So a network whose interval has already elapsed while
+Home Assistant was down uploads promptly after startup instead of
+waiting all over again, while a network whose last attempt failed
+recently stays throttled for the remainder of its interval. If no prior
+time was restored (a brand-new network, or recorder history cleared),
+it falls back to waiting one full minimum — harmless; a 429 is not.
 
 Within a cycle, the networks are uploaded a few seconds apart rather
 than all at once, so they do not all resolve DNS and open connections
@@ -463,6 +468,20 @@ have to catch in the act.
   This is left in place after a later success, so the state returns to
   `ok` while the timestamp still shows when the last problem was.
 
+### One last-successful-upload sensor per network
+
+`sensor.weather_network_uploader_<network>_last_success`, e.g.
+`..._wow_be_last_success`. A `timestamp` sensor, so Home Assistant shows
+it as relative time ("3 minutes ago").
+
+Its state is the moment this network last *accepted* an upload — distinct
+from the last-error sensor, which tells you what went wrong. The value
+persists across later failures, so `now() - last_success` is a clean way
+to alert on a network that has gone quiet, even one that is failing
+silently rather than erroring. It is unknown until the first success,
+and it is restored across a Home Assistant restart, so a reboot does not
+reset it to unknown until the next cycle.
+
 ### One connectivity sensor per network
 
 `binary_sensor.weather_network_uploader_<network>_upload`, e.g.
@@ -584,6 +603,19 @@ Disabling it is offered but discouraged: with the check off, a station
 that dies at 03:00 republishes its final reading as a current
 observation forever. For CWOP that means feeding fiction to NOAA's MADIS
 and, through it, National Weather Service forecasters.
+
+#### Limitation: the first hour after a restart
+
+The check relies on `last_reported`, which Home Assistant resets to the
+moment of restart for any source sensor that restores its own state on
+startup. For up to `max_sensor_age` after a Home Assistant restart, a
+mapped sensor can therefore look freshly reported even if its underlying
+station is dead, so a stale value may be published as current during
+that window. Once the station reports again — or once the window passes
+without a report — the check works normally. This only affects the
+period right after a restart; in steady-state operation `last_reported`
+reflects real writes. If this matters for your setup, a shorter
+`max_sensor_age` narrows the window.
 
 ### Guarding against faulty sensor mappings
 
@@ -731,6 +763,12 @@ login line, which is never logged — but it does embed your coordinates,
 so the position is masked in the log line. The callsign, timestamp, and
 weather fields are kept. Debug logs are therefore safe to paste into a
 bug report; the packet actually sent to APRS-IS is unaffected.
+
+For reporting a problem, the integration page's **Download diagnostics**
+button is usually easier than logs: it produces a redacted JSON snapshot
+of the configuration, each network's last result and error code with
+timings, and the sensor mapping. Credentials and coordinates are
+redacted, so the file is safe to attach to an issue as-is.
 
 ### Data you may not intend to publish
 

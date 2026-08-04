@@ -30,7 +30,8 @@ custom_components/weather_uploader/
 ├── config_flow.py        3-step config flow + options flow
 ├── coordinator.py        entity read, unit normalization, fan-out
 ├── binary_sensor.py      one connectivity entity per network + a data-health entity
-├── sensor.py             one last-error status entity per network (state = short code)
+├── sensor.py             per-network sensors: last-error status (short code) + last-success timestamp
+├── diagnostics.py        redacted Download-diagnostics snapshot (credentials + coordinates redacted)
 ├── translations/en.json  all user-facing strings
 ├── brand/                icon.png + icon@2x.png (generated)
 └── uploaders/
@@ -533,3 +534,5 @@ skip, and one uploader raising while another succeeds.
 - Cache credentials anywhere outside the config entry.
 - Add telemetry, analytics, or a "phone home" check.
 - Widen the entity selector beyond numeric domains.
+
+- Post-restart, throttles are re-seeded from the last *attempt* (max of restored last-success/last-error), never last-success alone, so a recent 429 keeps a network throttled across a restart.

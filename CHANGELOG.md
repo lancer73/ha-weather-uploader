@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A per-network last-successful-upload sensor
+  (`sensor.weather_network_uploader_<network>_last_success`), a
+  timestamp entity answering "when did this network last accept data",
+  distinct from the last-error time. It persists across later failures,
+  so an automation can alert when a network has gone quiet even if it is
+  not currently erroring.
+
+### Changed
+
+- The per-network last-error and last-success sensors now restore their
+  state across a Home Assistant restart. Coordinator status is in-memory
+  only, so previously both read unknown after a reboot until the next
+  cycle; they now show the pre-restart value immediately, and the first
+  fresh cycle still overwrites it.
+- After a restart, each network's rate-limit throttle is seeded from its
+  real last attempt (the later of the restored last-success and
+  last-error times) instead of waiting a full interval. A network whose
+  interval has already elapsed uploads promptly rather than after
+  another full wait; a network whose last attempt failed recently stays
+  throttled, so a restart cannot re-trip a provider's rate limit.
+- Diagnostics support (the "Download diagnostics" button on the
+  integration page). It dumps a redacted snapshot -- config, per-network
+  result, error code, timings, measurement count, and the sensor mapping
+  -- so a problem can be reported without hand-copying logs. Credentials
+  and coordinates (including CWOP coordinates nested in the service
+  credentials) are redacted.
+- The CWOP payload exposed in the upload-status sensor's attributes is
+  now position-redacted, matching the debug log and diagnostics.
+  Entity attributes are persisted by the recorder and served by the
+  states API, so the raw APRS packet -- which embeds exact coordinates
+  -- should not be stored there. The packet sent on the wire is
+  unchanged.
+
+### Fixed
+
+- A network whose minimum interval equals the polling interval (e.g.
+  WOW-BE and OpenWeatherMap at 60 s on a 60 s poll) uploaded only every
+  other tick -- every two minutes instead of every minute. Sends are
+  dispatched a moment after each poll tick (staggered, plus network
+  latency), so the "last sent" time landed just after the tick and the
+  next tick read as fractionally too early. The due check now forgives
+  that dispatch offset, sized to the stagger window and capped at half
+  the poll interval so it cannot let a network send faster than its rate
+  limit.
+- A genuine 0% relative-humidity reading is no longer encoded as the
+  CWOP field `h00`, which the APRS spec reads as 100%. The low end is
+  clamped to `h01`, the closest representable value.
+- The post-restart throttle re-seed no longer acts on a partially
+  restored state. The two status sensors per network restore in
+  sequence, so the first (last-error) restore would seed the throttle
+  from an incomplete last-attempt time and immediately request a
+  refresh, which could upload on stale throttle state -- on every reload
+  as well as reboots. The refresh is now debounced and re-armed as each
+  sensor restores, so it runs once, after the full last-attempt time is
+  known.
+- A restored last-error time is no longer discarded by the first
+  successful upload after a restart. The rebuilt uploader started with
+  no error time, and the first cycle wrote that empty value over the
+  restored one; the uploader is now seeded on restore so the history
+  survives.
+- Cancellation during an upload cycle now propagates instead of being
+  swallowed, so an integration reload or Home Assistant shutdown is not
+  delayed by the inter-network stagger.
+
 ## [1.0.0] - 2026-07-31
 
 No code changes. This is the first production level release of the integration.
