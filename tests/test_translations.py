@@ -47,7 +47,7 @@ def test_translation_keys_match_english(lang):
 
 @pytest.mark.parametrize("lang", LANGUAGES)
 def test_translation_placeholders_preserved(lang):
-    """{service} and {warnings} must survive translation."""
+    """Placeholders like {service}, {warnings}, {network} must survive."""
     english = dict(_strings(_load("en")))
     translated = dict(_strings(_load(lang)))
     for path, source in english.items():
