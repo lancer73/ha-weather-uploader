@@ -9,7 +9,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -136,7 +136,16 @@ class SourceDataEntity(_BaseEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return True when there is no fresh data left to publish."""
+        """Return True when there is no fresh data left to publish.
+
+        While Home Assistant is still starting, mapped source sensors from
+        other integrations may not have initialised yet, so absent data is
+        expected rather than a problem. Report unknown (None) until startup
+        finishes, so a restart does not raise a false alarm; normal
+        detection resumes once Home Assistant is running.
+        """
+        if self.coordinator.hass.state is CoreState.starting:
+            return None
         if self.coordinator.data is None:
             return None
         return not self.coordinator.data_is_fresh

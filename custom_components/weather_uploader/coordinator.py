@@ -10,6 +10,7 @@ from typing import Any, Final
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
+    EVENT_HOMEASSISTANT_STARTED,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfLength,
@@ -18,7 +19,13 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfVolumetricFlux,
 )
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, State, callback
+from homeassistant.core import (
+    CALLBACK_TYPE,
+    CoreState,
+    HomeAssistant,
+    State,
+    callback,
+)
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -513,8 +520,25 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @callback
     def _fire_reseed_refresh(self, _now: Any) -> None:
-        """Dispatch the debounced post-reseed refresh."""
+        """Dispatch the debounced post-reseed refresh.
+
+        If Home Assistant is still starting, mapped source sensors may not
+        be ready yet, so firing now would build an empty payload and raise
+        a spurious source-data problem. In that case wait for the
+        ``homeassistant_started`` event and refresh then; once running,
+        refresh immediately.
+        """
         self._reseed_refresh_unsub = None
+        if self.hass.state is CoreState.starting:
+            self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, self._reseed_refresh_on_started
+            )
+            return
+        self.hass.async_create_task(self.async_request_refresh())
+
+    @callback
+    def _reseed_refresh_on_started(self, _event: Any) -> None:
+        """Run the deferred reseed refresh once Home Assistant has started."""
         self.hass.async_create_task(self.async_request_refresh())
 
     async def async_shutdown(self) -> None:
