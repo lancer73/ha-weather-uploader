@@ -166,7 +166,9 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # config_entry is required: recent Home Assistant refuses
         # async_config_entry_first_refresh() unless the coordinator is
         # linked to its entry. Omitting it fails setup with a misleading
-        # "No setup function defined" error. Needs HA >= 2024.8.
+        # "No setup function defined" error. Needs HA >= 2024.8, and the
+        # integration's declared floor is now 2024.11 (for aiohttp's
+        # ClientConnectorDNSError; see classify_client_error).
         super().__init__(
             hass,
             _LOGGER,
