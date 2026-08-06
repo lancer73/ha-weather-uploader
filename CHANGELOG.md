@@ -53,6 +53,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The source-data problem sensor no longer raises a false alarm during
+  Home Assistant startup. Mapped source sensors from other integrations
+  may still be initialising for a short while after a restart; the
+  problem sensor now reports unknown until Home Assistant has finished
+  starting, and the post-restart throttle-reseed refresh waits for the
+  same point instead of firing into the initialisation window. Once
+  running, detection and refresh behave as before. (The restart
+  promptness work in this release made the pre-existing startup window
+  more visible.)
 - A DNS resolver timeout (the "Timeout while contacting DNS servers"
   seen with WOW-BE) is now reported as the `dns` error code instead of
   the generic `connection`. The async resolver's timeout does not

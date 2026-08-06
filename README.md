@@ -1,5 +1,4 @@
 [![Release](https://img.shields.io/github/v/release/lancer73/ha-weather-uploader?label=latest-release&color=green&logo=github)](https://github.com/lancer73/ha-weather-uploader/releases/latest)
-![HACS installs](https://img.shields.io/badge/dynamic/json?url=https://analytics.home-assistant.io/custom_integrations.json&query=$.weather_uploader.total&label=HACS%20installs)
 ![Build Status Hassfest](https://img.shields.io/github/actions/workflow/status/lancer73/ha-weather-uploader/hassfest.yml?label=hassfest)
 ![Build Status HACS](https://img.shields.io/github/actions/workflow/status/lancer73/ha-weather-uploader/hacs.yml?label=hacs)
 ![GitHub License](https://img.shields.io/github/license/lancer73/ha-weather-uploader)
