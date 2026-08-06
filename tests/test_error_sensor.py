@@ -32,6 +32,31 @@ def test_classify_dns_error():
     assert BaseUploader.classify_client_error(err) == "dns"
 
 
+def test_classify_dns_resolver_timeout():
+    """The aiodns/c-ares timeout must classify as dns, not connection.
+
+    "Timeout while contacting DNS servers" is raised by the async
+    resolver and does not surface as a socket.gaierror, so it is caught
+    via ClientConnectorDNSError (aiohttp 3.10.10+) rather than the
+    gaierror path.
+    """
+    dns_error = getattr(aiohttp, "ClientConnectorDNSError", None)
+    if dns_error is None:  # pragma: no cover - depends on aiohttp version
+        import pytest
+
+        pytest.skip("aiohttp too old for ClientConnectorDNSError")
+    key = type("K", (), {"host": "x", "port": 443, "ssl": None})()
+    err = dns_error(key, OSError("Timeout while contacting DNS servers"))
+    assert BaseUploader.classify_client_error(err) == "dns"
+
+
+def test_classify_connection_error_is_not_dns():
+    """A non-resolver connection failure stays 'connection', not 'dns'."""
+    key = type("K", (), {"host": "x", "port": 443, "ssl": None})()
+    err = aiohttp.ClientConnectorError(key, ConnectionRefusedError(111, "refused"))
+    assert BaseUploader.classify_client_error(err) == "connection"
+
+
 def test_record_error_sets_code_message_time():
     up = build_uploader(None, "windy", {"station_id": "s", "key": "SECRET"})
     up.record_error("dns", "host x: SECRET in url")
