@@ -187,9 +187,10 @@ class BaseUploader(ABC):
         # failures, which crucially includes the aiodns/c-ares timeout
         # ("Timeout while contacting DNS servers") that does NOT surface
         # as a socket.gaierror -- so the gaierror check below misses it.
-        # Guarded with getattr because the class is absent on the oldest
-        # supported core (HA 2024.8 shipped aiohttp < 3.10.10); there it
-        # falls through to the gaierror path.
+        # The declared floor (HA 2024.11, aiohttp 3.10.10) guarantees the
+        # class, but the getattr guard is kept as cheap insurance against
+        # a manual install on an unsupported older core, where it falls
+        # through to the gaierror path.
         dns_error = getattr(aiohttp, "ClientConnectorDNSError", None)
         if dns_error is not None and isinstance(err, dns_error):
             return "dns"
