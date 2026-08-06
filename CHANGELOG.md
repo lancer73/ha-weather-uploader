@@ -48,7 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged.
 
 ### Fixed
-
+- A DNS resolver timeout (the "Timeout while contacting DNS servers"
+  seen with WOW-BE) is now reported as the `dns` error code instead of
+  the generic `connection`. The async resolver's timeout does not
+  surface as a `socket.gaierror`, so the previous check missed it and
+  fell through to `connection`; it is now matched via aiohttp's
+  `ClientConnectorDNSError` (with a fallback for older cores that lack
+  it). The specific failure was always visible in the sensor's
+  `last_error` attribute -- only the short code was wrong.
 - A network whose minimum interval equals the polling interval (e.g.
   WOW-BE and OpenWeatherMap at 60 s on a 60 s poll) uploaded only every
   other tick -- every two minutes instead of every minute. Sends are
