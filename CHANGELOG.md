@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Minimum supported Home Assistant version raised to 2024.11 (from
+  2024.8). This is the first release whose bundled aiohttp (3.10.10)
+  provides `ClientConnectorDNSError`, which the DNS error classification
+  now relies on.
 - The per-network status sensor names (last error, last success) are now
   localized, following the Home Assistant UI language via a `{network}`
   placeholder rather than being hard-coded English. Dutch and French
@@ -48,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged.
 
 ### Fixed
+
 - A DNS resolver timeout (the "Timeout while contacting DNS servers"
   seen with WOW-BE) is now reported as the `dns` error code instead of
   the generic `connection`. The async resolver's timeout does not
