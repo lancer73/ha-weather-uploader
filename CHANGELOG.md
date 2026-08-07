@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The source-data problem sensor could still flip briefly to "problem"
+  right after a restart, then clear within a minute. Suppressing only
+  while Home Assistant was "starting" was not enough: a source
+  integration can become available a little after startup finishes. The
+  flag is now also held through a short post-startup grace, ending as
+  soon as every mapped sensor has reported one usable value, or after a
+  120-second backstop -- so a genuinely dead sensor is still flagged,
+  just not instantly on boot.
+
 ## [1.1.0] - 2026-08-07
 
 ### Added
