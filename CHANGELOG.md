@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-07
+
 ### Added
 
 - A per-network last-successful-upload sensor
@@ -685,7 +687,9 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/lancer73/ha-weather-uploader/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.10.0...v1.0.0
 [0.10.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.7.0...v0.8.0
