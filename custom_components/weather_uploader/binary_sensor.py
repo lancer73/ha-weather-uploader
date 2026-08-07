@@ -138,13 +138,17 @@ class SourceDataEntity(_BaseEntity):
     def is_on(self) -> bool | None:
         """Return True when there is no fresh data left to publish.
 
-        While Home Assistant is still starting, mapped source sensors from
-        other integrations may not have initialised yet, so absent data is
-        expected rather than a problem. Report unknown (None) until startup
-        finishes, so a restart does not raise a false alarm; normal
-        detection resumes once Home Assistant is running.
+        While Home Assistant is still starting, or during the brief grace
+        after startup before every mapped source sensor has reported its
+        first value, absent data is expected rather than a problem -- a
+        source integration may initialise a little after startup finishes.
+        Report unknown (None) until then, so a restart does not raise a
+        false alarm; normal detection resumes once sensors are ready or
+        the grace times out.
         """
         if self.coordinator.hass.state is CoreState.starting:
+            return None
+        if self.coordinator.in_startup_grace:
             return None
         if self.coordinator.data is None:
             return None

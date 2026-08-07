@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Any, Final
 
@@ -69,6 +70,14 @@ DUE_TOLERANCE_MARGIN: Final = 2
 # before the first post-restart upload (harmless against 60-300s upload
 # intervals) while widening the margin for all sensors to finish
 # restoring on a slow startup.
+# How long after startup to keep suppressing the source-data problem
+# flag while waiting for every mapped sensor to report its first usable
+# value. A backstop only: the grace normally ends as soon as all mapped
+# sensors have reported, well within this. Long enough to cover a slow
+# source integration initialising after homeassistant_started, short
+# enough that a genuinely dead sensor is still flagged promptly.
+STARTUP_GRACE_TIMEOUT: Final = 120
+
 RESEED_REFRESH_DELAY: Final = 5
 
 _INVALID_STATES = {STATE_UNKNOWN, STATE_UNAVAILABLE, "", "none", "None"}
@@ -216,6 +225,13 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.stale_sensors: list[str] = []
         self.missing_sensors: list[str] = []
         self.implausible_sensors: list[str] = []
+        # Startup grace: mapped entities that have produced a usable value
+        # at least once since start. Until every mapped entity has (or the
+        # grace deadline passes), the source-data problem flag is
+        # suppressed, so a source integration that initialises a little
+        # after homeassistant_started does not raise a brief false alarm.
+        self._reported_once: set[str] = set()
+        self._startup_grace_deadline: float | None = None
 
     def read_sensors(self) -> dict[str, float]:
         """Collect, validate, and normalize every mapped sensor value.
@@ -262,6 +278,12 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if state.state in _INVALID_STATES:
                 missing.append(key)
                 continue
+
+            # The entity has produced a usable (non-unavailable) state, so
+            # it counts as initialised for the startup grace, even if it
+            # later fails numeric or plausibility checks -- those are real
+            # data problems, not "not ready yet".
+            self._reported_once.add(entity_id)
 
             try:
                 value = float(state.state)
@@ -590,6 +612,28 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "error_times": dict(previous.get("error_times", {})),
             "success_times": dict(previous.get("success_times", {})),
         }
+
+    @property
+    def in_startup_grace(self) -> bool:
+        """True while still waiting for mapped sensors to first report.
+
+        After a restart a source integration may become available a little
+        after ``homeassistant_started``. During that gap absent data is
+        expected, not a problem. The grace ends as soon as every mapped
+        sensor has produced one usable value, or when
+        ``STARTUP_GRACE_TIMEOUT`` passes -- whichever comes first -- so a
+        genuinely dead sensor is still flagged, just not instantly on
+        boot. With nothing mapped there is nothing to wait for.
+        """
+        if not self._map:
+            return False
+        mapped_entity_ids = set(self._map.values())
+        if mapped_entity_ids <= self._reported_once:
+            return False  # every mapped sensor has reported at least once
+        now = time.monotonic()
+        if self._startup_grace_deadline is None:
+            self._startup_grace_deadline = now + STARTUP_GRACE_TIMEOUT
+        return now < self._startup_grace_deadline
 
     @property
     def data_is_fresh(self) -> bool:
