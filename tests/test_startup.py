@@ -15,11 +15,12 @@ from custom_components.weather_uploader.binary_sensor import SourceDataEntity
 from custom_components.weather_uploader.coordinator import UploadCoordinator
 
 
-def _problem_sensor(hass_state, data_is_fresh):
+def _problem_sensor(hass_state, data_is_fresh, in_grace=False):
     coord = MagicMock()
     coord.entry.entry_id = "e1"
     coord.data = {"data": {}}
     coord.data_is_fresh = data_is_fresh
+    coord.in_startup_grace = in_grace
     coord.hass.state = hass_state
     return SourceDataEntity(coord)
 
@@ -37,6 +38,59 @@ def test_problem_flagged_when_running():
 def test_no_problem_when_running_with_fresh_data():
     sensor = _problem_sensor(CoreState.running, data_is_fresh=True)
     assert sensor.is_on is False
+
+
+def test_problem_suppressed_during_post_startup_grace():
+    """Even when running, the flag is held while grace is active."""
+    sensor = _problem_sensor(
+        CoreState.running, data_is_fresh=False, in_grace=True
+    )
+    assert sensor.is_on is None
+
+
+def _grace_coordinator(mapped, reported):
+
+    c = UploadCoordinator.__new__(UploadCoordinator)
+    c._map = dict(mapped)
+    c._reported_once = set(reported)
+    c._startup_grace_deadline = None
+    return c
+
+
+def test_grace_active_until_all_sensors_report():
+    c = _grace_coordinator(
+        {"temperature": "sensor.t", "humidity": "sensor.h"}, {"sensor.t"}
+    )
+    # one of two mapped sensors has reported -> still in grace
+    assert c.in_startup_grace is True
+
+
+def test_grace_ends_when_all_sensors_reported():
+    c = _grace_coordinator(
+        {"temperature": "sensor.t", "humidity": "sensor.h"},
+        {"sensor.t", "sensor.h"},
+    )
+    assert c.in_startup_grace is False
+
+
+def test_grace_ends_after_timeout(monkeypatch):
+    """A never-reporting sensor stops suppressing once the deadline passes."""
+    import custom_components.weather_uploader.coordinator as mod
+
+    c = _grace_coordinator({"temperature": "sensor.t"}, set())  # never reports
+    base = 1000.0
+    monkeypatch.setattr(mod.time, "monotonic", lambda: base)
+    assert c.in_startup_grace is True  # deadline set now
+    # jump past the timeout
+    monkeypatch.setattr(
+        mod.time, "monotonic", lambda: base + mod.STARTUP_GRACE_TIMEOUT + 1
+    )
+    assert c.in_startup_grace is False
+
+
+def test_grace_inactive_with_nothing_mapped():
+    c = _grace_coordinator({}, set())
+    assert c.in_startup_grace is False
 
 
 def _reseed_coordinator(hass_state):
