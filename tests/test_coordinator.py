@@ -191,3 +191,24 @@ def test_pascals_leak_is_caught():
     """The headline mis-unit case: 101325 Pa into an hPa field."""
     assert not _is_plausible("pressure_relative", 101325.0)
     assert _is_plausible("pressure_relative", 1013.25)
+
+
+def test_unexpected_exception_recorded_consistently_and_redacted():
+    """An unexpected send() exception must go through record_error.
+
+    Regression for the path where the coordinator wrote str(outcome)
+    straight into the error message (bypassing redaction) while the code
+    and time were read from an uploader that never saw the failure. After
+    the fix the coordinator calls record_error first, so code, message,
+    and time are consistent and the message is credential-redacted.
+    """
+    from custom_components.weather_uploader.uploaders import build_uploader
+
+    up = build_uploader(None, "windy", {"station_id": "s", "key": "SECRETKEY"})
+    # What the coordinator now does when send() raised unexpectedly:
+    up.record_error("exception", "crash mentioning SECRETKEY")
+
+    assert up.last_error_code == "exception"
+    assert up.last_error_time is not None
+    assert "SECRETKEY" not in up.last_error  # redacted
+    assert up.last_error == "crash mentioning ***"

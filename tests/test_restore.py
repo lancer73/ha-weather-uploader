@@ -153,6 +153,7 @@ def _reseed_coordinator(uploaders, success_times, error_times):
     c.uploaders = uploaders
     c.data = {"success_times": success_times, "error_times": error_times}
     c._reseed_refresh_unsub = None
+    c._reseed_started_unsub = None
     c.hass = MagicMock()
     return c
 
@@ -240,11 +241,18 @@ def test_reseed_debounces_refresh_until_last_restore(monkeypatch):
     assert len(scheduled) == 2
     assert len(cancels) == 1  # the first was cancelled
 
-    # Only the last scheduled callback actually dispatches a refresh.
+    # Only the last scheduled callback runs; it hands the refresh to
+    # async_at_started (which fires now if started, else on STARTED).
+    at_started = []
+    monkeypatch.setattr(
+        mod, "async_at_started", lambda hass, cb: at_started.append(cb) or MagicMock()
+    )
     created = []
     coord.hass.async_create_task = lambda coro: (created.append(1), coro.close())
     coord.async_request_refresh = MagicMock()
-    scheduled[-1][1](None)  # fire the timer callback
+    scheduled[-1][1](None)  # fire the debounce timer callback
+    assert len(at_started) == 1  # handed off, not fired directly
+    at_started[0](coord.hass)  # simulate "started"
     assert len(created) == 1
 
 
