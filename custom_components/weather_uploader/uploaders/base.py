@@ -271,10 +271,10 @@ class BaseUploader(ABC):
         interval makes the network due at once, a recent one still waits
         out the remainder.
 
-        ``seconds_since_attempt`` must be clamped by the caller to a sane,
-        non-negative range, since it derives from wall-clock times that a
-        clock change during downtime could distort. It has no effect on
-        an unthrottled uploader.
+        ``seconds_since_attempt`` may be any value, including negative or
+        implausibly large ones from a clock change during downtime: it is
+        clamped internally to ``[0, min_interval]`` before use. It has no
+        effect on an unthrottled uploader.
         """
         if self.min_interval <= 0:
             return

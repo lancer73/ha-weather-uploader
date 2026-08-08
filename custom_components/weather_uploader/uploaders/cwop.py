@@ -324,9 +324,8 @@ class CwopUploader(BaseUploader):
                 )
             except TimeoutError:
                 # The connection phase (DNS resolution + TCP handshake)
-                # timed out. Coded distinctly so it reads clearly and is
-                # eligible for the one-shot retry, like the HTTP
-                # networks' connect timeout.
+                # timed out. Coded distinctly from a later read timeout so
+                # the failure reads clearly in the error sensor.
                 self.record_error("connect_timeout", "connection timed out")
                 _LOGGER.warning("CWOP connection timed out")
                 return False
