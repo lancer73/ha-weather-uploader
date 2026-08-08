@@ -11,7 +11,6 @@ from typing import Any, Final
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
-    EVENT_HOMEASSISTANT_STARTED,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfLength,
@@ -22,13 +21,13 @@ from homeassistant.const import (
 )
 from homeassistant.core import (
     CALLBACK_TYPE,
-    CoreState,
     HomeAssistant,
     State,
     callback,
 )
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import (
@@ -221,6 +220,11 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # sensor restore so the refresh fires once, after every network's
         # success/error pair has restored -- not on the first, partial one.
         self._reseed_refresh_unsub: CALLBACK_TYPE | None = None
+        # Unsub for the "run once started" callback that the debounced
+        # refresh hands off to (via async_at_started). Stored so a reload
+        # before startup cancels it instead of leaving it to fire on a
+        # shut-down coordinator.
+        self._reseed_started_unsub: CALLBACK_TYPE | None = None
         # Populated by read_sensors() on every cycle, for diagnostics.
         self.stale_sensors: list[str] = []
         self.missing_sensors: list[str] = []
@@ -448,6 +452,15 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # A failed attempt still consumed the provider's budget, so
             # throttle on attempt rather than on success.
             uploader.mark_sent()
+            # An unexpected exception (one send() did not handle itself)
+            # must be recorded on the uploader before its error fields are
+            # read below, so the code, message, and time stay consistent
+            # with each other and the message goes through the uploader's
+            # credential redaction -- rather than the raw str landing in
+            # recorded attributes while the code/time stay stale.
+            if isinstance(outcome, Exception):
+                _LOGGER.error("%s raised unexpectedly: %s", uploader.name, outcome)
+                uploader.record_error("exception", str(outcome))
             # Record what this network actually sent -- the payload
             # captured during send(), not a rebuild (which would recompute
             # timestamps and differ from what went on the wire). Already
@@ -459,9 +472,8 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             error_codes[uploader.name] = uploader.last_error_code
             error_times[uploader.name] = uploader.last_error_time
             if isinstance(outcome, Exception):
-                _LOGGER.error("%s raised unexpectedly: %s", uploader.name, outcome)
                 results[uploader.name] = False
-                errors[uploader.name] = str(outcome)
+                errors[uploader.name] = uploader.last_error
             else:
                 results[uploader.name] = outcome
                 errors[uploader.name] = uploader.last_error
@@ -542,25 +554,35 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @callback
     def _fire_reseed_refresh(self, _now: Any) -> None:
-        """Dispatch the debounced post-reseed refresh.
+        """Dispatch the debounced post-reseed refresh once started.
 
-        If Home Assistant is still starting, mapped source sensors may not
-        be ready yet, so firing now would build an empty payload and raise
-        a spurious source-data problem. In that case wait for the
-        ``homeassistant_started`` event and refresh then; once running,
-        refresh immediately.
+        Config-entry setup (and entity restore) runs during boot while
+        the core state is still ``not_running`` -- ``starting`` is only
+        set later, inside ``async_start``. So a plain state check here
+        would not defer on a reboot, and the refresh would fire into the
+        window where source sensors are still initialising. ``async_at_
+        started`` handles both cases correctly: it runs the callback
+        immediately if Home Assistant has already started, and otherwise
+        waits for the started event. The unsub is stored so a reload
+        before startup cancels the pending callback.
         """
         self._reseed_refresh_unsub = None
-        if self.hass.state is CoreState.starting:
-            self.hass.bus.async_listen_once(
-                EVENT_HOMEASSISTANT_STARTED, self._reseed_refresh_on_started
-            )
-            return
-        self.hass.async_create_task(self.async_request_refresh())
+        # Cancel any earlier registration first: if a prior debounce
+        # already fired during boot and registered an at_started callback,
+        # a later sensor restoring (>debounce after it) would otherwise
+        # overwrite the unsub and leak that listener, leaving two to fire
+        # at STARTED. The refresh debouncer would collapse the duplicate
+        # refresh, but the stray callback should not exist at all.
+        if self._reseed_started_unsub is not None:
+            self._reseed_started_unsub()
+        self._reseed_started_unsub = async_at_started(
+            self.hass, self._reseed_refresh_when_started
+        )
 
     @callback
-    def _reseed_refresh_on_started(self, _event: Any) -> None:
-        """Run the deferred reseed refresh once Home Assistant has started."""
+    def _reseed_refresh_when_started(self, _hass: HomeAssistant) -> None:
+        """Run the reseed refresh now that Home Assistant has started."""
+        self._reseed_started_unsub = None
         self.hass.async_create_task(self.async_request_refresh())
 
     async def async_shutdown(self) -> None:
@@ -568,6 +590,9 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._reseed_refresh_unsub is not None:
             self._reseed_refresh_unsub()
             self._reseed_refresh_unsub = None
+        if self._reseed_started_unsub is not None:
+            self._reseed_started_unsub()
+            self._reseed_started_unsub = None
         await super().async_shutdown()
 
     def _due_tolerance(self) -> float:

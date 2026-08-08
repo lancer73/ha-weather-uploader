@@ -9,7 +9,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -138,16 +138,18 @@ class SourceDataEntity(_BaseEntity):
     def is_on(self) -> bool | None:
         """Return True when there is no fresh data left to publish.
 
-        While Home Assistant is still starting, or during the brief grace
-        after startup before every mapped source sensor has reported its
-        first value, absent data is expected rather than a problem -- a
-        source integration may initialise a little after startup finishes.
-        Report unknown (None) until then, so a restart does not raise a
-        false alarm; normal detection resumes once sensors are ready or
-        the grace times out.
+        During the brief grace after startup -- before every mapped source
+        sensor has reported its first value -- absent data is expected
+        rather than a problem, since a source integration may initialise a
+        little after Home Assistant starts. Report unknown (None) until
+        then, so a restart does not raise a false alarm; normal detection
+        resumes once sensors are ready or the grace times out.
+
+        (An earlier ``CoreState.starting`` guard was dropped: config-entry
+        setup runs while the core state is still ``not_running``, so that
+        check never engaged on a reboot -- the grace, which is state-
+        independent, is what actually covers the window.)
         """
-        if self.coordinator.hass.state is CoreState.starting:
-            return None
         if self.coordinator.in_startup_grace:
             return None
         if self.coordinator.data is None:
