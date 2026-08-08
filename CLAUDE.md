@@ -451,7 +451,7 @@ deliberately generic and borrows no provider's mark.
 
 ## Versioning
 
-Current release: **1.1.0**. Semantic Versioning 2.0.0.
+Current release: **1.1.1**. Semantic Versioning 2.0.0.
 **Do not bump the version without being asked** — the maintainer decides
 when and what to release.
 
