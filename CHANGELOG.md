@@ -9,14 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- The source-data problem sensor could still flip briefly to "problem"
-  right after a restart, then clear within a minute. Suppressing only
-  while Home Assistant was "starting" was not enough: a source
-  integration can become available a little after startup finishes. The
-  flag is now also held through a short post-startup grace, ending as
-  soon as every mapped sensor has reported one usable value, or after a
-  120-second backstop -- so a genuinely dead sensor is still flagged,
-  just not instantly on boot.
+- The source-data problem sensor could flip briefly to "problem" right
+  after a restart, then clear within a minute. Source integrations can
+  become available a little after Home Assistant finishes starting, so
+  absent data during that window is expected, not a fault. The flag is
+  now held through a short post-startup grace, ending as soon as every
+  mapped sensor has reported one usable value, or after a 120-second
+  backstop -- so a genuinely dead sensor is still flagged, just not
+  instantly on boot.
+- The post-restart throttle-reseed refresh no longer fires into the
+  sensor-initialisation window. It previously checked for the "starting"
+  core state, but config-entry setup runs while the state is still
+  "not running", so that check never engaged on a reboot and the refresh
+  ran immediately -- potentially uploading a partial observation and
+  spending a network's rate-limit slot, delaying the first complete
+  upload. It now uses Home Assistant's start helper, which runs the
+  refresh once startup has actually completed. A second debounce during
+  boot cancels any earlier pending registration first, so no stray
+  start-listener is left behind.
+- An unexpected exception from a network's send path is now recorded
+  consistently: the last-error sensor shows an `exception` code with the
+  correct time and a credential-redacted message, instead of leaving the
+  code stale while the raw exception text (possibly containing a key)
+  landed in recorded attributes.
+
+### Changed
+
+- Internal: the source-data grace and reseed-refresh timing no longer
+  depend on the core state being "starting" (which never occurs during
+  config-entry setup); both now key off whether Home Assistant has
+  started. Documentation comments corrected in a couple of places
+  (throttle-seed clamping, a stale reference to a retry that does not
+  exist).
 
 ## [1.1.0] - 2026-08-07
 
