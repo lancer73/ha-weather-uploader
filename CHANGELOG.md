@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-07
+
+### Added
+
+- Weathercloud (`weathercloud.net`) as an upload target. Uploads use the
+  Weathercloud v01 API with the device WID and Key. Note two specifics:
+  values are sent as integer-scaled metric (most fields ×10, wind speed
+  in m/s ×10), and success is read from the response body rather than the
+  HTTP status (which is always 200). The free-tier rate limit is one
+  upload per 10 minutes, applied as this network's minimum interval.
+
 ## [1.1.1] - 2026-08-07
 
 ### Fixed
@@ -724,7 +735,8 @@ Confirmed on 2026-07-16 against the WOW-BE OpenAPI 3.1 spec
   `cloud_base` are collected and normalized but no supported network has
   a parameter for them. They appear in `last_payload` only.
 
-[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/lancer73/ha-weather-uploader/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/lancer73/ha-weather-uploader/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/lancer73/ha-weather-uploader/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/lancer73/ha-weather-uploader/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lancer73/ha-weather-uploader/compare/v0.10.0...v1.0.0

@@ -20,6 +20,7 @@ Supported networks:
 | PWSWeather | `pwsupdate.pwsweather.com/api/v1/submitwx` | GET query | Station password | Imperial |
 | Windy | `stations.windy.com/api/v2/observation/update` | GET query | Station password | Metric |
 | OpenWeatherMap | `api.openweathermap.org/data/3.0/measurements` | POST JSON | API key | Metric (°C, hPa) |
+| Weathercloud | `api.weathercloud.net/v01/set` | GET query | Device WID + Key | Metric, integer-scaled (×10) |
 
 Where your data ends up varies by network, and none of these are
 purely hobbyist. A rough spectrum:
