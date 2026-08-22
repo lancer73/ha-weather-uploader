@@ -15,6 +15,7 @@ from ..const import (
     SERVICE_CWOP,
     SERVICE_OPENWEATHERMAP,
     SERVICE_PWSWEATHER,
+    SERVICE_WEATHERCLOUD,
     SERVICE_WINDY,
     SERVICE_WOW_BE,
     SERVICE_WUNDERGROUND,
@@ -23,6 +24,7 @@ from .base import BaseUploader, UploaderError
 from .cwop import CwopUploader, build_packet
 from .openweathermap import OpenWeatherMapUploader
 from .pwsweather import PWSWeatherUploader
+from .weathercloud import WeathercloudUploader
 from .windy import WindyUploader
 from .wowbe import WowBeUploader
 from .wunderground import WundergroundUploader
@@ -33,6 +35,7 @@ __all__ = [
     "OpenWeatherMapUploader",
     "PWSWeatherUploader",
     "UploaderError",
+    "WeathercloudUploader",
     "WindyUploader",
     "WowBeUploader",
     "WundergroundUploader",
@@ -91,5 +94,8 @@ def build_uploader(
 
     if service == SERVICE_OPENWEATHERMAP:
         return OpenWeatherMapUploader(session, station_id, key, interval)
+
+    if service == SERVICE_WEATHERCLOUD:
+        return WeathercloudUploader(session, station_id, key, interval)
 
     return None
