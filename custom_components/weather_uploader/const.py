@@ -156,6 +156,7 @@ SERVICE_PWSWEATHER: Final = "pwsweather"
 SERVICE_WINDY: Final = "windy"
 SERVICE_OPENWEATHERMAP: Final = "openweathermap"
 SERVICE_CWOP: Final = "cwop"
+SERVICE_WEATHERCLOUD: Final = "weathercloud"
 
 SERVICES: Final[list[str]] = [
     SERVICE_WOW_BE,
@@ -164,6 +165,7 @@ SERVICES: Final[list[str]] = [
     SERVICE_PWSWEATHER,
     SERVICE_WINDY,
     SERVICE_OPENWEATHERMAP,
+    SERVICE_WEATHERCLOUD,
 ]
 
 # Networks that need the station's coordinates on every observation.
@@ -186,6 +188,9 @@ WOW_BE_HOST: Final = "https://wow.meteo.be"
 # Windy:  documents roughly a 5 minute minimum.
 # CWOP:   NOAA asks for no faster than one packet every 5 minutes
 #         (wxqa.com/faq.html, Q1). This one is a published rule.
+# Weathercloud: API documents a 10-minute data interval on the free
+#         tier (1 minute for Pro/Premium); faster requests are rejected.
+#         We use the free-tier floor.
 # The others: values used by comparable multi-network forwarders; not
 #   verified against published limits, so they are floors rather than
 #   optimums.
@@ -196,6 +201,7 @@ MIN_SERVICE_INTERVAL: Final[dict[str, int]] = {
     SERVICE_PWSWEATHER: 300,
     SERVICE_WINDY: 300,
     SERVICE_OPENWEATHERMAP: 60,
+    SERVICE_WEATHERCLOUD: 600,
 }
 
 # A mapped entity whose state has not changed for longer than this is
