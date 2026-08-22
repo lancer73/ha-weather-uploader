@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation: completed the README for Weathercloud. The 1.2.0 README
+  added Weathercloud to the network table but missed the other places
+  that enumerate networks; the data-destination spectrum, the
+  minimum-interval table, the per-field unit-mapping table (new `WC`
+  column, plus a note on why soil moisture is not sent), the
+  credentials-in-query-strings note, and the troubleshooting table
+  (`wc_429` / `wc_401`) now all cover it.
+
 ## [1.2.0] - 2026-08-07
 
 ### Added

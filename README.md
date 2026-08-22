@@ -40,7 +40,9 @@ purely hobbyist. A rough spectrum:
   only a public map.
 - **Community and regional networks.** **PWSWeather** is primarily an
   enthusiast platform, though even these may be consumed by third
-  parties.
+  parties. **Weathercloud** is a community weather-station network with a
+  public map and its own apps; its higher paid tiers add faster upload
+  rates and historical data access.
 
 The practical takeaway: your observations may be used well beyond a
 personal dashboard — by forecasters, researchers, or commercial data
@@ -243,6 +245,7 @@ network's send cadence fixed.
 | PWSWeather | 300 s | conservative default, unverified |
 | Windy | 300 s | **documented**: once per 5 min |
 | OpenWeatherMap | 60 s | conservative default, unverified |
+| Weathercloud | 600 s | **documented**: free tier is once per 10 min |
 
 Set the poll interval to whatever your fastest network wants. Networks
 that are not due are skipped for that tick and keep their previous
@@ -350,41 +353,44 @@ Every field is optional. The left column is the mapping key shown in the
 config flow. The "internal unit" is what the integration normalizes to
 before each uploader converts again.
 
-| Key | Internal unit | WOW-BE | WU | CWOP | PWS | Windy | OWM |
-| --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
-| `temperature` | °C | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `dewpoint` | °C | ✅ | ✅ | — | ✅ | ✅ | ✅ |
-| `humidity` | % | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `pressure_absolute` | hPa | ✅ | — | — | — | ✅ | — |
-| `pressure_relative` | hPa | ✅ | ✅ | ✅ | ✅ | — | ✅ |
-| `wind_speed` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `wind_gust` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `wind_direction` | ° | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `wind_gust_direction` | ° | ✅ | ✅ | — | — | — | — |
-| `rain_rate` | mm/h | ✅ | — | — | — | — | — |
-| `rain_hourly` | mm | — | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `rain_24h` | mm | — | — | ✅ | — | — | ✅ |
-| `rain_daily` | mm | ✅ | ✅ | ▲ | ✅ | — | — |
-| `rain_weekly` | mm | — | ✅ | — | — | — | — |
-| `rain_monthly` | mm | — | ✅ | — | ✅ | — | — |
-| `rain_yearly` | mm | — | ✅ | — | ✅ | — | — |
-| `solar_radiation` | W/m² | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| `uv_index` | index | ✅ | ✅ | — | ✅ | ✅ | — |
-| `illuminance` | lux | — | — | — | — | — | — |
-| `indoor_temperature` | °C | — | ✅ | — | — | — | — |
-| `indoor_humidity` | % | — | ✅ | — | — | — | — |
-| `soil_temperature` | °C | ✅ | ✅ | — | ✅ | — | — |
-| `soil_moisture` | % | ✅ | ✅ | — | ✅ | — | — |
-| `leaf_wetness` | % | — | ✅ | — | — | — | — |
-| `pm25` | µg/m³ | — | ✅ | — | — | — | — |
-| `pm10` | µg/m³ | — | ✅ | — | — | — | — |
-| `co2` | ppm | — | — | — | — | — | — |
-| `lightning_count` | count | — | — | — | — | — | — |
-| `lightning_distance` | km | — | — | — | — | — | — |
-| `visibility` | km | ✅ | ✅ | — | — | — | ✅ |
-| `cloud_base` | m | — | — | — | — | — | — |
+| Key | Internal unit | WOW-BE | WU | CWOP | PWS | Windy | OWM | WC |
+| --- | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| `temperature` | °C | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `dewpoint` | °C | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| `humidity` | % | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pressure_absolute` | hPa | ✅ | — | — | — | ✅ | — | — |
+| `pressure_relative` | hPa | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ |
+| `wind_speed` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `wind_gust` | m/s | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `wind_direction` | ° | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `wind_gust_direction` | ° | ✅ | ✅ | — | — | — | — | — |
+| `rain_rate` | mm/h | ✅ | — | — | — | — | — | ✅ |
+| `rain_hourly` | mm | — | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| `rain_24h` | mm | — | — | ✅ | — | — | ✅ | — |
+| `rain_daily` | mm | ✅ | ✅ | ▲ | ✅ | — | — | ✅ |
+| `rain_weekly` | mm | — | ✅ | — | — | — | — | — |
+| `rain_monthly` | mm | — | ✅ | — | ✅ | — | — | — |
+| `rain_yearly` | mm | — | ✅ | — | ✅ | — | — | — |
+| `solar_radiation` | W/m² | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| `uv_index` | index | ✅ | ✅ | — | ✅ | ✅ | — | ✅ |
+| `illuminance` | lux | — | — | — | — | — | — | — |
+| `indoor_temperature` | °C | — | ✅ | — | — | — | — | ✅ |
+| `indoor_humidity` | % | — | ✅ | — | — | — | — | ✅ |
+| `soil_temperature` | °C | ✅ | ✅ | — | ✅ | — | — | — |
+| `soil_moisture` | % | ✅ | ✅ | — | ✅ | — | — | ✳ |
+| `leaf_wetness` | % | — | ✅ | — | — | — | — | — |
+| `pm25` | µg/m³ | — | ✅ | — | — | — | — | — |
+| `pm10` | µg/m³ | — | ✅ | — | — | — | — | — |
+| `co2` | ppm | — | — | — | — | — | — | — |
+| `lightning_count` | count | — | — | — | — | — | — | — |
+| `lightning_distance` | km | — | — | — | — | — | — | — |
+| `visibility` | km | ✅ | ✅ | — | — | — | ✅ | — |
+| `cloud_base` | m | — | — | — | — | — | — | — |
 
 ▲ = transmitted but ignored by MADIS.
+✳ = Weathercloud has a `soilmoist` field, but it expects soil tension in
+centibars, not the volumetric percentage this integration carries, so
+the value is deliberately not sent (no valid unit conversion exists).
 
 Fields with no ✅ in any column are accepted, normalized, and exposed in
 the `last_payload` attribute, but no supported network has a parameter
@@ -701,6 +707,12 @@ credential as a URL query parameter. TLS protects it in transit, but it
 lands in the provider's access logs by design, and in any intercepting
 proxy's logs on your own network. This is inherent to those APIs.
 
+Weathercloud is the same case: it takes the device WID and Key as query
+parameters, so both land in Weathercloud's access logs. TLS protects
+them in transit; this integration keeps them out of its own logs and
+error attributes, but they travel in the request URL as the API
+mandates.
+
 Windy puts the key in the URL path — same exposure.
 
 **WOW-BE is the exception**, and it is a meaningful one: this
@@ -802,6 +814,8 @@ logger:
 | `HTTP 422` from WOW-BE | Field validation failed. The message names the field; check `last_error`. A bad `siteid` gives "must be a valid site short ID". |
 | `HTTP 429` from WOW-BE | Rate limited: 20/min/site, 600/min/IP. Increase the interval. |
 | `HTTP 401` / `HTTP 403` elsewhere | Wrong key or station ID. |
+| `wc_429` from Weathercloud | Sent faster than the free-tier 10-minute limit. Weathercloud reports the result in the response body, so its error codes are `wc_<n>` (e.g. `wc_429`, `wc_401`) rather than `http_<n>`. |
+| `wc_401` from Weathercloud | Wrong device WID or Key. |
 | Rain rate looks 10x off on WOW-BE | `rain_rate` mapped to an accumulation sensor. It must be a rate. |
 | Values plausible but consistently offset | Absolute/relative pressure mix-up, or an entity with a missing unit attribute. |
 | `Mapped entity ... is not numeric` | The entity's state is a string like `north`. Use a template sensor to convert. |
