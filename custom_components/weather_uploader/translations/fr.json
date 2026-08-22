@@ -143,7 +143,8 @@
         "cwop": "CWOP / NOAA (alimente MADIS + National Weather Service)",
         "pwsweather": "PWSWeather",
         "windy": "Windy",
-        "openweathermap": "OpenWeatherMap"
+        "openweathermap": "OpenWeatherMap",
+        "weathercloud": "Weathercloud"
       }
     },
     "owm_mode": {
