@@ -5,6 +5,7 @@ These tests never touch the live WOW-BE endpoint: it is rate limited
 per IP and CI would trip it.
 """
 
+import asyncio
 import re
 from datetime import UTC, datetime
 
@@ -571,7 +572,6 @@ def test_cwop_humidity_hundred_is_h00():
 def test_cwop_last_payload_is_redacted():
     """last_payload reaches the recorder/states API, so it must not carry
     exact coordinates."""
-    import asyncio
     from unittest.mock import AsyncMock, MagicMock, patch
 
     from custom_components.weather_uploader.uploaders.cwop import CwopUploader
@@ -594,3 +594,115 @@ def test_cwop_last_payload_is_redacted():
     stored = up.last_payload.get("packet", "")
     assert "<position redacted>" in stored
     assert "5205.44N" not in stored
+
+
+def test_weathercloud_scaling(sample_data):
+    """Weathercloud receives integer-scaled metric values and its WID/Key.
+
+    The scaling is the part most likely to be wrong, so pin the exact
+    integers: temperature/pressure/rain x10, wind speed m/s x10, humidity
+    and wind direction unscaled.
+    """
+    from custom_components.weather_uploader.uploaders.weathercloud import (
+        WeathercloudUploader,
+    )
+
+    up = WeathercloudUploader(None, "12345", "abcdef")
+    p = up.build_params(sample_data)
+    assert p["wid"] == "12345"
+    assert p["key"] == "abcdef"
+    assert p["temp"] == 200  # 20.0 C x10
+    assert p["dew"] == 100  # 10.0 C x10
+    assert p["hum"] == 52  # unscaled
+    assert p["bar"] == 10132  # 1013.25 hPa x10, banker's rounding
+    assert p["wspd"] == 50  # 5.0 m/s x10
+    assert p["wspdhi"] == 90  # 9.0 m/s gust x10
+    assert p["wdir"] == 180  # unscaled degrees
+    assert p["rain"] == 254  # 25.4 mm x10
+    assert p["rainrate"] == 51  # 5.08 mm/h x10
+    assert p["solarrad"] == 4500  # 450 W/m2 x10
+    assert p["uvi"] == 40  # 4.0 index x10
+    # all measurement values are ints, never floats
+    for k, v in p.items():
+        if k not in ("wid", "key"):
+            assert isinstance(v, int), f"{k} should be int, got {type(v)}"
+
+
+def test_weathercloud_unset_fields_pruned():
+    """Fields with no source data are dropped, not sent as empty."""
+    from custom_components.weather_uploader.uploaders.weathercloud import (
+        WeathercloudUploader,
+    )
+
+    up = WeathercloudUploader(None, "12345", "abcdef")
+    p = up._prune(up.build_params({"temperature": 18.5}))
+    assert p["temp"] == 185
+    assert "hum" not in p
+    assert "bar" not in p
+
+
+class _FakeResp:
+    def __init__(self, body, status=200):
+        self._body = body
+        self.status = status
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def text(self):
+        return self._body
+
+
+class _FakeSession:
+    def __init__(self, body, status=200):
+        self._body = body
+        self._status = status
+        self.last_url = None
+        self.last_params = None
+
+    def get(self, url, params=None, timeout=None):
+        self.last_url = url
+        self.last_params = params
+        return _FakeResp(self._body, self._status)
+
+
+def test_weathercloud_success_read_from_body():
+    """Body '200' means success even though HTTP status is always 200."""
+    from custom_components.weather_uploader.uploaders.weathercloud import (
+        WeathercloudUploader,
+    )
+
+    session = _FakeSession("200")
+    up = WeathercloudUploader(session, "12345", "abcdef")
+    ok = asyncio.run(up.send({"temperature": 20.0}))
+    assert ok is True
+    assert up.last_error_code is None
+
+
+def test_weathercloud_rejection_read_from_body():
+    """A non-200 body is a failure, coded wc_<code>, despite HTTP 200."""
+    from custom_components.weather_uploader.uploaders.weathercloud import (
+        WeathercloudUploader,
+    )
+
+    session = _FakeSession("429")  # rate limited, but HTTP is still 200
+    up = WeathercloudUploader(session, "12345", "abcdef")
+    ok = asyncio.run(up.send({"temperature": 20.0}))
+    assert ok is False
+    assert up.last_error_code == "wc_429"
+
+
+def test_weathercloud_credentials_not_in_last_payload():
+    """The recorded payload must not carry wid/key."""
+    from custom_components.weather_uploader.uploaders.weathercloud import (
+        WeathercloudUploader,
+    )
+
+    session = _FakeSession("200")
+    up = WeathercloudUploader(session, "12345", "SECRETKEY")
+    asyncio.run(up.send({"temperature": 20.0}))
+    assert "key" not in up.last_payload
+    assert "SECRETKEY" not in str(up.last_payload)

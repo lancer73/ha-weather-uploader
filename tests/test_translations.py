@@ -65,3 +65,17 @@ def test_technical_identifiers_not_translated(lang):
         for path, source in english.items():
             if term in source:
                 assert term in translated[path], f"{lang} {path}: lost '{term}'"
+
+
+def test_every_service_has_an_option_label():
+    """Each SERVICES entry must have a selector label in every language.
+
+    Guards against adding a network to the code but forgetting its label
+    in en/nl/fr, which would show the raw key in the config flow.
+    """
+    from custom_components.weather_uploader.const import SERVICES
+
+    for lang in ("en", *LANGUAGES):
+        options = _load(lang)["selector"]["services"]["options"]
+        for service in SERVICES:
+            assert service in options, f"{lang}: missing label for '{service}'"
