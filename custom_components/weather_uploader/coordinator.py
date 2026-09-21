@@ -270,7 +270,7 @@ class UploadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             state = self.hass.states.get(entity_id)
             if state is None:
                 missing.append(key)
-                if entity_id not in self._warned:
+                if entity_id not in self._warned and not self.in_startup_grace:
                     _LOGGER.warning(
                         "Mapped entity %s (%s) does not exist; skipping it",
                         entity_id,
