@@ -14,6 +14,7 @@ timestamp. Only ``last_reported`` separates them.
 """
 
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.util import dt as dt_util
@@ -22,7 +23,46 @@ from custom_components.weather_uploader.const import (
     CONF_MAX_SENSOR_AGE,
     DEFAULT_MAX_SENSOR_AGE,
 )
-from custom_components.weather_uploader.coordinator import _reported_at
+from custom_components.weather_uploader.coordinator import (
+    UploadCoordinator,
+    _reported_at,
+)
+
+
+def _coordinator_with_missing_entity():
+    """Return a coordinator whose mapped entity is absent from Home Assistant."""
+    hass = MagicMock()
+    hass.states.get.return_value = None
+    entry = MagicMock()
+    entry.data = {"temperature": "sensor.outdoor_temperature"}
+    entry.options = {}
+    entry.entry_id = "abc"
+    return UploadCoordinator(hass, entry, [], interval=60)
+
+
+def test_missing_entity_warning_is_suppressed_during_startup_grace(caplog):
+    """A missing source entity is expected while startup grace is active."""
+    coordinator = _coordinator_with_missing_entity()
+
+    with caplog.at_level("WARNING"):
+        coordinator.read_sensors()
+
+    assert not caplog.records
+    assert coordinator._warned == set()
+
+
+def test_missing_entity_warning_is_emitted_after_startup_grace(caplog):
+    """A missing source entity is warned once after startup grace expires."""
+    coordinator = _coordinator_with_missing_entity()
+    coordinator._startup_grace_deadline = 0
+
+    with caplog.at_level("WARNING"):
+        coordinator.read_sensors()
+        coordinator.read_sensors()
+
+    assert len(caplog.records) == 1
+    assert "sensor.outdoor_temperature" in caplog.records[0].message
+    assert coordinator._warned == {"sensor.outdoor_temperature"}
 
 
 class FakeState:
