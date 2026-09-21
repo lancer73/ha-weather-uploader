@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Suppress missing mapped-entity warnings during startup grace.
-  Reported and fixed by @paulmadejong.
+  Reported and fixed by [@paulmadejong](https://github.com/paulmadejong).
 
 ## [1.2.0] - 2026-08-07
 
